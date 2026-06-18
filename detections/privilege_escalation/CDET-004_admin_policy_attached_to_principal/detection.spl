@@ -1,0 +1,63 @@
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventSource="iam.amazonaws.com"
+eventName IN (AttachUserPolicy, AttachRolePolicy, PutUserPolicy, PutRolePolicy)
+NOT errorCode=*
+
+| eval creator_arn=coalesce('userIdentity.arn', "unknown"),
+       creator_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       policy_arn=coalesce('requestParameters.policyArn', "inline"),
+       is_inline_policy=if(eventName IN ("PutUserPolicy", "PutRolePolicy"), "true", "false"),
+       target_principal=coalesce(
+           'requestParameters.userName',
+           'requestParameters.roleName',
+           "unknown"
+       ),
+       policy_document=coalesce('requestParameters.policyDocument', "{}"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("For managed policy attachments: check against the admin_policy_arns lookup")`
+| lookup admin_policy_arns policy_arn AS policy_arn OUTPUT is_admin_policy
+| eval is_admin_managed=coalesce(is_admin_policy, "false")
+
+`comment("For inline policies: flag if policyDocument contains wildcard actions or Admin patterns")`
+| eval inline_grants_admin=if(
+    is_inline_policy="true" AND (
+        match(policy_document, "\"Action\":\s*\"\*\"") OR
+        match(policy_document, "'Action':\s*'\*'") OR
+        match(policy_document, "iam:\*") OR
+        match(policy_document, "AdministratorAccess")
+    ),
+    "true",
+    "false"
+  )
+
+`comment("Only proceed if the policy is administrative")`
+| where is_admin_managed="true" OR inline_grants_admin="true"
+
+`comment("Suppress approved automation principals")`
+| lookup approved_iam_principals arn AS creator_arn OUTPUT approved
+| lookup automation_role_arns arn AS creator_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| where isnull(issuer_approved) OR issuer_approved!="true"
+
+| eval detection_id="CDET-004",
+       severity="high",
+       urgency=2,
+       confidence="high",
+       tactic="Privilege Escalation",
+       technique="T1078.004",
+       technique_name="Valid Accounts: Cloud Accounts",
+       alert_title="[CDET-004] Admin Policy Attached to IAM Principal"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, creator_arn, creator_type, session_issuer_arn,
+         target_principal, policy_arn, is_inline_policy, inline_grants_admin,
+         event_source_ip, region
+| sort -_time

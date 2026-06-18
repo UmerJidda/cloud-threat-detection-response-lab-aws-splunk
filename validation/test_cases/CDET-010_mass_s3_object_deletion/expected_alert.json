@@ -1,0 +1,21 @@
+{
+  "detection_id": "CDET-010",
+  "alert_title": "[CDET-010] Mass S3 Object Deletion",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Impact",
+  "technique": "T1485",
+  "technique_name": "Data Destruction",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "principal_type": "IAMUser",
+  "destruction_scope": "multi-bucket",
+  "total_delete_events": 25,
+  "estimated_objects_deleted": 1500,
+  "buckets_targeted": 4,
+  "bucket_names_str": "prod-data-bucket,backup-bucket,logs-archive,config-store",
+  "delete_operations": "DeleteObjects,DeleteObject",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

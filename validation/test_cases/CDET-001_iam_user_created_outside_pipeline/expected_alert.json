@@ -1,0 +1,20 @@
+{
+  "detection_id": "CDET-001",
+  "alert_title": "[CDET-001] IAM User Created Outside Pipeline",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Persistence",
+  "technique": "T1136.003",
+  "technique_name": "Create Account: Cloud Account",
+  "eventName": "CreateUser",
+  "creator_arn": "arn:aws:iam::123456789012:user/attacker",
+  "new_user_name": "backdoor-user",
+  "new_user_arn": "arn:aws:iam::123456789012:user/backdoor-user",
+  "mfa_used": "No",
+  "principal_type": "IAMUser",
+  "session_issuer_arn": null,
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

@@ -1,0 +1,18 @@
+{
+  "detection_id": "CDET-005",
+  "alert_title": "[CDET-005] Cross-Account Role Trust Modified",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Persistence",
+  "technique": "T1098.003",
+  "technique_name": "Account Manipulation: Additional Cloud Roles",
+  "eventName": "UpdateAssumeRolePolicy",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "role_name": "DataAccessRole",
+  "external_account_id": "999888777666",
+  "trust_policy_fragment": "{\"Principal\":{\"AWS\":\"arn:aws:iam::999888777666:root\"}}",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

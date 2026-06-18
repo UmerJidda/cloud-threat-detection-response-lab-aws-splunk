@@ -1,0 +1,3 @@
+cidr,approved,description,environment,date_added,expiry_date,added_by,reason
+203.0.113.0/24,true,Example corporate office egress IP range,all,2024-01-15,,security-team,Known corporate NAT gateway range — replace with actual
+198.51.100.0/24,true,Example VPN gateway IP range,all,2024-01-15,,security-team,Corporate VPN exit IPs — replace with actual

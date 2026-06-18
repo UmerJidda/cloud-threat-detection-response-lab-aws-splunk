@@ -1,0 +1,74 @@
+`aws_cloudtrail_index`
+`timeframe_2h`
+eventName IN (
+    "ListUsers", "ListRoles", "ListGroups", "ListPolicies",
+    "ListAttachedUserPolicies", "ListAttachedRolePolicies",
+    "ListGroupsForUser", "GetUser", "GetRole", "GetPolicy",
+    "DescribeInstances", "DescribeVolumes", "DescribeSecurityGroups",
+    "DescribeVpcs", "DescribeSubnets", "DescribeRouteTables",
+    "DescribeLoadBalancers", "DescribeTargetGroups",
+    "ListBuckets", "GetBucketAcl", "GetBucketPolicy",
+    "GetBucketVersioning", "ListObjects", "ListObjectsV2",
+    "ListFunctions", "GetFunction", "ListLayers",
+    "DescribeDBInstances", "DescribeClusters",
+    "ListSecrets", "DescribeSecret",
+    "DescribeStacks", "ListStacks",
+    "DescribeKeys", "ListKeys",
+    "GetCallerIdentity", "ListAccountAliases",
+    "DescribeAccount", "ListRegions"
+)
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       region='awsRegion',
+       api_service=replace(eventSource, "\.amazonaws\.com$", "")
+
+`comment("Suppress approved scanning roles before aggregating (efficiency)")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("Aggregate by principal to measure enumeration breadth and depth")`
+| stats
+    count               AS total_calls,
+    dc(eventName)       AS unique_api_calls,
+    dc(api_service)     AS services_enumerated,
+    values(eventName)   AS api_calls_list,
+    values(api_service) AS services_list,
+    dc(awsRegion)       AS regions_touched,
+    values(awsRegion)   AS regions_list,
+    first(sourceIPAddress) AS event_source_ip
+    BY principal_arn, principal_type
+
+`comment("Apply thresholds: high volume AND breadth indicate systematic enumeration")`
+| where total_calls >= 50 AND unique_api_calls >= 5
+
+`comment("Stringify value lists for table output")`
+| eval api_calls_sample=mvjoin(mvindex(api_calls_list, 0, 9), ", "),
+       services_enumerated_str=mvjoin(services_list, ", ")
+
+`comment("Classify intensity of enumeration")`
+| eval enumeration_intensity=case(
+    total_calls >= 500 AND services_enumerated >= 10, "high",
+    total_calls >= 200 OR services_enumerated >= 7,  "medium",
+    true(),                                           "low"
+  )
+
+| eval detection_id="CDET-008",
+       severity="medium",
+       urgency=3,
+       confidence="medium",
+       tactic="Discovery",
+       technique="T1580",
+       technique_name="Cloud Infrastructure Discovery",
+       alert_title="[CDET-008] Excessive API Enumeration by Single Principal"
+
+| table detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         principal_arn, principal_type, enumeration_intensity,
+         total_calls, unique_api_calls, services_enumerated,
+         api_calls_sample, services_enumerated_str,
+         regions_touched, event_source_ip
+| sort -total_calls

@@ -1,0 +1,22 @@
+{
+  "detection_id": "CDET-014",
+  "alert_title": "[CDET-014] CloudTrail Log Deleted from S3",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Defense Evasion",
+  "technique": "T1070.004",
+  "technique_name": "Indicator Removal: File Deletion",
+  "eventName": "DeleteObjects",
+  "deletion_type": "bulk_log_deletion",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "principal_type": "IAMUser",
+  "session_issuer_arn": null,
+  "bucket_name": "aws-cloudtrail-logs-123456789012",
+  "trail_name": "management-events-trail",
+  "object_key": "AWSLogs/123456789012/CloudTrail/us-east-1/2024/01/15/",
+  "estimated_logs_deleted": 48,
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

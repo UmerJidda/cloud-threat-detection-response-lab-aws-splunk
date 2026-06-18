@@ -1,0 +1,72 @@
+`comment("CDET-007: Two detection branches — CloudTrail IP anomaly + GuardDuty corroboration")`
+
+`comment("── Branch A: CloudTrail — EC2 instance role used from unexpected IP ──────────────")`
+
+`aws_cloudtrail_index`
+`timeframe_10m`
+userIdentity.type=AssumedRole
+'userIdentity.sessionContext.sessionIssuer.type'=EC2Instance
+NOT errorCode=*
+
+| eval instance_role_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "unknown"),
+       session_principal=coalesce('userIdentity.arn', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       event_name='eventName',
+       detection_branch="cloudtrail_ip_anomaly"
+
+`comment("Suppress if source IP is within known private/EC2 ranges")`
+| lookup ec2_private_cidr_ranges cidr AS event_source_ip OUTPUT is_known_ec2_ip
+| eval is_known_ec2_ip=coalesce(is_known_ec2_ip, "false")
+| where is_known_ec2_ip!="true"
+
+`comment("Suppress approved external-sourced role usage (e.g., cross-region federation)")`
+| lookup approved_iam_principals arn AS instance_role_arn OUTPUT approved
+| where isnull(approved) OR approved!="true"
+
+| eval severity="critical",
+       confidence="high",
+       detection_id="CDET-007",
+       urgency=1,
+       tactic="Credential Access",
+       technique="T1552.005",
+       technique_name="Unsecured Credentials: Cloud Instance Metadata",
+       alert_title="[CDET-007] EC2 Instance Metadata Credential Used Outside EC2 Network"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         detection_branch, event_name, instance_role_arn, session_principal,
+         event_source_ip, region
+
+`comment("── Branch B: GuardDuty — InstanceCredentialExfiltration finding ───────────────────")`
+
+| append [
+    search `aws_alerts_index`
+    `timeframe_10m`
+    sourcetype="aws:guardduty:finding"
+    finding_type IN (
+        "UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.InsideAWS",
+        "UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS"
+    )
+
+    | eval detection_branch="guardduty_finding",
+           instance_role_arn=coalesce('resource_id', "unknown"),
+           event_source_ip=coalesce('src_ip', 'remote_ip_address', "unknown"),
+           region='awsRegion',
+           event_name="GuardDutyFinding:" + finding_type,
+           severity="critical",
+           confidence="high",
+           detection_id="CDET-007",
+           urgency=1,
+           tactic="Credential Access",
+           technique="T1552.005",
+           technique_name="Unsecured Credentials: Cloud Instance Metadata",
+           alert_title="[CDET-007] GuardDuty: EC2 Instance Credential Exfiltration Detected"
+
+    | table _time, detection_id, alert_title, severity, urgency, confidence,
+             tactic, technique, technique_name,
+             detection_branch, event_name, instance_role_arn,
+             event_source_ip, region
+]
+
+| sort -_time

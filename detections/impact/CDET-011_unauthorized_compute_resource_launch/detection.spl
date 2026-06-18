@@ -1,0 +1,56 @@
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventName IN (RunInstances, CreateFunction)
+eventSource IN ("ec2.amazonaws.com", "lambda.amazonaws.com")
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       instance_type=coalesce('requestParameters.instanceType', "lambda"),
+       instance_count=coalesce(
+           toint('requestParameters.maxCount'),
+           1
+       ),
+       function_name=coalesce('requestParameters.functionName', "N/A"),
+       function_runtime=coalesce('requestParameters.runtime', "N/A")
+
+`comment("Suppress approved deployment and auto-scaling principals")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| where isnull(issuer_approved) OR issuer_approved!="true"
+
+`comment("Check if instance type is in the suspicious types lookup")`
+| lookup suspicious_instance_types instance_type AS instance_type OUTPUT is_suspicious_type, abuse_category
+| eval is_suspicious_type=coalesce(is_suspicious_type, "false"),
+       abuse_category=coalesce(abuse_category, "general compute abuse")
+
+`comment("Escalate severity for confirmed high-risk instance types")`
+| eval severity=case(
+    is_suspicious_type="true",                  "high",
+    instance_count >= 10,                        "high",
+    eventName="RunInstances",                    "high",
+    eventName="CreateFunction",                  "medium",
+    true(),                                       "medium"
+  )
+
+| eval detection_id="CDET-011",
+       urgency=case(severity="high", 2, true(), 3),
+       confidence="medium",
+       tactic="Impact",
+       technique="T1496",
+       technique_name="Resource Hijacking",
+       alert_title="[CDET-011] Unauthorized Compute Resource Launch"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, principal_arn, principal_type, session_issuer_arn,
+         instance_type, instance_count, is_suspicious_type, abuse_category,
+         function_name, function_runtime, event_source_ip, region
+| sort -_time

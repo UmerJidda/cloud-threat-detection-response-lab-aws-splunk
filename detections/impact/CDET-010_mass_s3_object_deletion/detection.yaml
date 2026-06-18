@@ -1,0 +1,107 @@
+---
+id: CDET-010
+name: "Mass S3 Object Deletion"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Impact"
+technique: "T1485"
+sub_technique: ""
+technique_name: "Data Destruction"
+
+severity: critical
+confidence: high
+risk_score: 87
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.bucketName
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/5 * * * *"
+lookback: "-10m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized for large-scale S3 lifecycle operations
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: Data pipeline roles performing legitimate large-scale deletions
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  Legitimate mass deletion scenarios:
+  - S3 lifecycle policies expiring objects (performed by S3 service, not IAM user)
+  - Data pipeline cleanup after ETL processing
+  - Application log rotation
+
+  S3 lifecycle expiration is performed by the AWS S3 service itself (userIdentity.type=
+  AWSService), not an IAM principal, so it does not trigger this detection.
+
+  ETL pipeline cleanup roles should be added to automation_role_arns.csv. Critically,
+  review whether those pipelines delete objects as part of normal operation or only
+  delete temporary/processed data — the suppression should be scoped narrowly.
+
+  The DeleteObjects batch API can delete up to 1000 objects per call. A single
+  DeleteObjects call may not be malicious. The threshold (>= 100 total objects
+  in 5 minutes) is intentionally low — a legitimate batch deletion at that scale
+  should be in the suppression list.
+
+test_cases:
+  - name: "Mass deletion — 500 DeleteObject calls in 5 minutes"
+    input_file: "data/samples/cloudtrail_s3_mass_deletion.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "Single bucket wiped via DeleteObjects batch call"
+    input_file: "data/samples/cloudtrail_s3_deleteobjects_batch.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "Normal deletion — 5 objects deleted"
+    input_file: "data/samples/cloudtrail_s3_normal_deletion.ndjson"
+    expected_alert: false
+    note: "Below threshold"
+
+playbook: "incident_response/playbooks/CDET-010_mass_s3_deletion.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Immediate page to on-call security and data owners"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (DeleteObject, DeleteObjects) from s3.amazonaws.com"
+    - "total delete events or objects >= 100 within 10 minutes"
+    - "principal not in approved lookups"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - principal_arn
+    - total_delete_events
+    - buckets_targeted
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Fires on sustained high-volume deletion activity"
+    - "Fires on single large DeleteObjects batch"
+    - "Does not fire below threshold"
+    - "Suppressed for approved data lifecycle principals"
+  attack_simulation_mapping:
+    atomic_test: "T1485 - Data Destruction"
+    simulation_file: "attack_simulation/scenarios/SIM-010_mass_s3_deletion.md"

@@ -1,0 +1,19 @@
+{
+  "detection_id": "CDET-002",
+  "alert_title": "[CDET-002] IAM Access Key Created for Existing User",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Persistence",
+  "technique": "T1098.001",
+  "technique_name": "Account Manipulation: Additional Cloud Credentials",
+  "eventName": "CreateAccessKey",
+  "creator_arn": "arn:aws:iam::123456789012:user/attacker",
+  "key_owner_name": "admin-service-account",
+  "new_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+  "is_cross_user": "true",
+  "is_for_privileged_user": "true",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

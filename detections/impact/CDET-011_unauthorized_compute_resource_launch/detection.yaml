@@ -1,0 +1,110 @@
+---
+id: CDET-011
+name: "Unauthorized Compute Resource Launch"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Impact"
+technique: "T1496"
+sub_technique: ""
+technique_name: "Resource Hijacking"
+
+severity: high
+confidence: medium
+risk_score: 62
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.instanceType
+  - requestParameters.minCount
+  - requestParameters.maxCount
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to launch compute resources
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: Auto-scaling and deployment roles excluded from this detection
+    file: splunk/lookups/automation_role_arns.csv
+  - name: suspicious_instance_types
+    description: Instance types commonly used for crypto mining or high-compute abuse
+    file: splunk/lookups/suspicious_instance_types.csv
+
+false_positive_notes: |
+  This detection has high FP potential in environments with active auto-scaling,
+  deployment pipelines, or development accounts where compute provisioning is
+  frequent.
+
+  Primary suppression: all deployment and auto-scaling roles must be in
+  automation_role_arns.csv.
+
+  Secondary suppression: use the suspicious_instance_types.csv lookup to focus
+  on compute types commonly used for abuse (p2, p3, g4 GPU types for mining;
+  high-CPU c5 types for scraping). Standard t3/m5 types may warrant lower severity.
+
+  Lambda function creation (CreateFunction) is lower-risk than EC2 but is included
+  for completeness. Lambda functions launched by unknown principals in regions the
+  org doesn't normally use are a notable signal.
+
+test_cases:
+  - name: "GPU instance launched by unknown principal"
+    input_file: "data/samples/cloudtrail_ec2_runinst_gpu.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Lambda function created in unexpected region"
+    input_file: "data/samples/cloudtrail_lambda_createfunction_unknown_region.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "EC2 instance launched by approved deployment pipeline"
+    input_file: "data/samples/cloudtrail_ec2_runinst_approved_pipeline.ndjson"
+    expected_alert: false
+    suppression_reason: "automation_role_arns lookup match"
+
+playbook: "incident_response/playbooks/CDET-011_unauthorized_compute_launch.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (RunInstances, CreateFunction)"
+    - "principal not in approved_iam_principals or automation_role_arns"
+    - "OR instance type is in suspicious_instance_types lookup"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - instance_type
+    - instance_count
+    - region
+    - is_suspicious_type
+  pass_criteria:
+    - "Fires on GPU/mining instance launch by unknown principal"
+    - "Fires on compute launch in unexpected region"
+    - "Suppressed for approved pipeline roles"
+  attack_simulation_mapping:
+    atomic_test: "T1496 - Resource Hijacking"
+    simulation_file: "attack_simulation/scenarios/SIM-011_compute_launch.md"

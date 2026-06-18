@@ -1,0 +1,19 @@
+{
+  "detection_id": "CDET-004",
+  "alert_title": "[CDET-004] Admin Policy Attached to Principal",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Privilege Escalation",
+  "technique": "T1078.004",
+  "technique_name": "Valid Accounts: Cloud Accounts",
+  "eventName": "AttachUserPolicy",
+  "attacher_arn": "arn:aws:iam::123456789012:user/attacker",
+  "target_principal": "arn:aws:iam::123456789012:user/victim",
+  "policy_arn": "arn:aws:iam::aws:policy/AdministratorAccess",
+  "is_wildcard_inline": "false",
+  "policy_risk_level": "critical",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

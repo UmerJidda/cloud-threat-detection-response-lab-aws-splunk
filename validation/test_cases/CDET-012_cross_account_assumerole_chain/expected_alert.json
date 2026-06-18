@@ -1,0 +1,21 @@
+{
+  "detection_id": "CDET-012",
+  "alert_title": "[CDET-012] Cross-Account AssumeRole Chain",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Lateral Movement",
+  "technique": "T1550.001",
+  "technique_name": "Use Alternate Authentication Material: Application Access Token",
+  "principal_arn": "arn:aws:sts::123456789012:assumed-role/InitialRole/attacker-session",
+  "principal_type": "AssumedRole",
+  "session_issuer_arn": "arn:aws:iam::123456789012:role/InitialRole",
+  "is_chained_assumption": "true",
+  "total_assumes": 3,
+  "distinct_target_accounts": 2,
+  "target_accounts_str": "999888777666,777666555444",
+  "target_roles_str": "arn:aws:iam::999888777666:role/StageRole,arn:aws:iam::777666555444:role/ProdRole",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

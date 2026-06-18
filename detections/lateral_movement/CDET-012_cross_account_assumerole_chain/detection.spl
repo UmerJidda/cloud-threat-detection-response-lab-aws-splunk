@@ -1,0 +1,83 @@
+`aws_cloudtrail_index`
+`timeframe_1h`
+eventName=AssumeRole
+eventSource="sts.amazonaws.com"
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       target_role_arn='requestParameters.roleArn',
+       role_session_name=coalesce('requestParameters.roleSessionName', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       source_account_id='userIdentity.accountId',
+       recipient_account_id=coalesce('recipientAccountId', "unknown")
+
+`comment("Extract target account ID from the assumed role ARN")`
+| rex field=target_role_arn "arn:aws:iam::(?<target_account_id>\d{12}):"
+
+`comment("Suppress calls where principal is an approved automation role")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("Check session issuer ARN — suppress automation roles that run as AssumedRole")`
+| lookup automation_role_arns arn AS session_issuer_arn OUTPUT approved AS issuer_auto_approved
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| eval issuer_suppressed=if(issuer_auto_approved="true" OR issuer_approved="true", "true", "false")
+| where issuer_suppressed!="true"
+
+`comment("Filter to cross-account assumptions only (target account != source account)")`
+| where target_account_id!=source_account_id
+
+`comment("Check if target account is an approved account")`
+| lookup approved_aws_accounts account_id AS target_account_id OUTPUT account_name, environment
+| eval is_approved_target=if(isnotnull(account_name), "true", "false")
+| where is_approved_target!="true"
+
+`comment("Flag chained assumptions: principal is already an AssumedRole session")`
+| eval is_chained_assumption=if(principal_type="AssumedRole", "true", "false")
+
+`comment("Aggregate by principal to surface breadth-first traversal patterns")`
+| stats
+    count                          AS total_assumes,
+    dc(target_account_id)          AS distinct_target_accounts,
+    values(target_account_id)      AS target_accounts_list,
+    values(target_role_arn)        AS target_roles_list,
+    first(is_chained_assumption)   AS is_chained_assumption,
+    first(principal_type)          AS principal_type,
+    first(session_issuer_arn)      AS session_issuer_arn,
+    first(event_source_ip)         AS event_source_ip,
+    first(region)                  AS region,
+    first(target_account_id)       AS target_account_id,
+    first(target_role_arn)         AS target_role_arn
+    BY principal_arn
+
+`comment("Escalate if chained OR multiple target accounts (breadth-first pattern)")`
+| eval severity=case(
+    is_chained_assumption="true" AND distinct_target_accounts >= 2,  "critical",
+    is_chained_assumption="true",                                      "high",
+    distinct_target_accounts >= 3,                                     "high",
+    true(),                                                             "high"
+  ),
+  urgency=case(severity="critical", 1, severity="high", 2, true(), 3)
+
+| eval target_accounts_str=mvjoin(target_accounts_list, ", "),
+       target_roles_str=mvjoin(target_roles_list, " | ")
+
+| eval detection_id="CDET-012",
+       confidence="medium",
+       tactic="Lateral Movement",
+       technique="T1550.001",
+       technique_name="Use Alternate Authentication Material: Application Access Token",
+       alert_title="[CDET-012] Cross-Account AssumeRole Chain Detected"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         principal_arn, principal_type, session_issuer_arn,
+         is_chained_assumption, total_assumes, distinct_target_accounts,
+         target_accounts_str, target_roles_str,
+         event_source_ip, region
+| sort -distinct_target_accounts, -total_assumes

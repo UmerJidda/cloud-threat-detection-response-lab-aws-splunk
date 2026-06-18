@@ -1,0 +1,5 @@
+account_id,account_name,environment,owner,date_added,added_by,reason
+123456789012,example-production,production,platform-team,2024-01-15,security-team,Primary production account
+234567890123,example-staging,staging,platform-team,2024-01-15,security-team,Staging/pre-production account
+345678901234,example-security,security,security-team,2024-01-15,security-team,Security tooling and audit account
+456789012345,example-logging,logging,security-team,2024-01-15,security-team,Centralized logging account

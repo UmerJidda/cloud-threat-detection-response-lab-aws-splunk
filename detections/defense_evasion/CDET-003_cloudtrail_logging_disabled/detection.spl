@@ -1,0 +1,54 @@
+`aws_cloudtrail_index`
+`timeframe_10m`
+eventSource="cloudtrail.amazonaws.com"
+eventName IN (StopLogging, DeleteTrail, UpdateTrail)
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       trail_name=coalesce('requestParameters.name', 'requestParameters.trailName', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("For UpdateTrail, only alert when the change impairs logging capabilities")`
+| eval update_disables_logging=case(
+    eventName="UpdateTrail" AND 'requestParameters.enableLogFileValidation'="false", "true",
+    eventName="UpdateTrail" AND 'requestParameters.isMultiRegionTrail'="false",     "true",
+    eventName="UpdateTrail" AND 'requestParameters.includeGlobalServiceEvents'="false", "true",
+    eventName="UpdateTrail",                                                          "false",
+    true(),                                                                            "true"
+  )
+
+| where update_disables_logging="true"
+
+`comment("Classify the type of logging-impairment action")`
+| eval disable_reason=case(
+    eventName="StopLogging",   "CloudTrail logging stopped — all API activity logging halted",
+    eventName="DeleteTrail",   "CloudTrail trail deleted — logging and log delivery permanently removed",
+    eventName="UpdateTrail" AND 'requestParameters.enableLogFileValidation'="false",
+                               "Log file integrity validation disabled",
+    eventName="UpdateTrail" AND 'requestParameters.isMultiRegionTrail'="false",
+                               "Multi-region trail disabled — coverage reduced to single region",
+    eventName="UpdateTrail" AND 'requestParameters.includeGlobalServiceEvents'="false",
+                               "Global service events excluded — IAM and STS events will be missed",
+    true(), "CloudTrail configuration change"
+  )
+
+`comment("Suppression: approved principals are extremely rare for this detection")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| where isnull(approved) OR approved!="true"
+
+| eval detection_id="CDET-003",
+       severity="critical",
+       urgency=1,
+       confidence="high",
+       tactic="Defense Evasion",
+       technique="T1562.008",
+       technique_name="Impair Defenses: Disable Cloud Logs",
+       alert_title="[CDET-003] CloudTrail Logging Disabled or Trail Deleted"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, trail_name, disable_reason,
+         principal_arn, principal_type, event_source_ip, region
+| sort -_time

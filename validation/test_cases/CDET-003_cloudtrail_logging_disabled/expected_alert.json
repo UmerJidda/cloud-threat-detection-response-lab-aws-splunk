@@ -1,0 +1,18 @@
+{
+  "detection_id": "CDET-003",
+  "alert_title": "[CDET-003] CloudTrail Logging Disabled",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Defense Evasion",
+  "technique": "T1562.008",
+  "technique_name": "Impair Defenses: Disable or Modify Cloud Logs",
+  "eventName": "StopLogging",
+  "disable_reason": "StopLogging called directly",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "trail_name": "management-events-trail",
+  "trail_arn": "arn:aws:cloudtrail:us-east-1:123456789012:trail/management-events-trail",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

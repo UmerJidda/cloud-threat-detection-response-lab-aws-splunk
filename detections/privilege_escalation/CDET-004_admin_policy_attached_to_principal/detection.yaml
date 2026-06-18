@@ -1,0 +1,124 @@
+---
+id: CDET-004
+name: "Admin Policy Attached to IAM Principal"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Privilege Escalation"
+technique: "T1078"
+sub_technique: "T1078.004"
+technique_name: "Valid Accounts: Cloud Accounts"
+secondary_techniques:
+  - technique: "T1098"
+    sub_technique: "T1098.003"
+    technique_name: "Account Manipulation: Additional Cloud Roles"
+
+severity: high
+confidence: high
+risk_score: 78
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.policyArn
+  - requestParameters.userName
+  - requestParameters.roleName
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to attach admin policies
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: admin_policy_arns
+    description: Policy ARNs considered administrative (includes AdministratorAccess and custom equivalents)
+    file: splunk/lookups/admin_policy_arns.csv
+  - name: automation_role_arns
+    description: CI/CD roles excluded from this detection
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  IaC pipelines that provision admin roles as part of account bootstrapping will
+  trigger this detection. Add the pipeline role to automation_role_arns.
+
+  Security tooling (CSPM, SIEM connectors) may attach read-heavy policies that
+  are not truly admin. Review the admin_policy_arns lookup carefully — only
+  include policies that grant wide write access.
+
+  PutUserPolicy and PutRolePolicy events attach inline policies with arbitrary
+  content. The detection uses a keyword list to identify policy documents that
+  contain Action:* or Effect:Allow/*. This is necessarily imprecise; inline
+  policy documents should be reviewed manually on each alert.
+
+test_cases:
+  - name: "AdministratorAccess attached to IAM user"
+    input_file: "data/samples/cloudtrail_iam_attachuserpolicy_admin.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "AdministratorAccess attached to role"
+    input_file: "data/samples/cloudtrail_iam_attachrolepolicy_admin.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Inline policy with Action star attached"
+    input_file: "data/samples/cloudtrail_iam_putuserpolicy_wildcard.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "ReadOnlyAccess attached — not admin"
+    input_file: "data/samples/cloudtrail_iam_attachuserpolicy_readonly.ndjson"
+    expected_alert: false
+    note: "ReadOnlyAccess is not in admin_policy_arns lookup"
+
+  - name: "Admin policy attached by approved IaC pipeline"
+    input_file: "data/samples/cloudtrail_iam_attachrolepolicy_pipeline.ndjson"
+    expected_alert: false
+    suppression_reason: "automation_role_arns lookup match"
+
+playbook: "incident_response/playbooks/CDET-004_admin_policy_attached.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (AttachUserPolicy, AttachRolePolicy) AND policyArn in admin_policy_arns lookup"
+    - "OR eventName IN (PutUserPolicy, PutRolePolicy) AND policyDocument contains Action:* or Effect:Allow/*"
+    - "creator ARN not in approved_iam_principals or automation_role_arns"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - target_principal
+    - policy_arn
+    - is_inline_policy
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Fires when AdministratorAccess is attached to any principal"
+    - "Fires when a custom admin policy (from lookup) is attached"
+    - "Fires when an inline policy with Action:* is attached"
+    - "Does not fire for non-admin managed policies"
+    - "Suppressed for approved automation principals"
+  attack_simulation_mapping:
+    atomic_test: "T1078.004 - Cloud Admin Privilege Escalation"
+    simulation_file: "attack_simulation/scenarios/SIM-004_privilege_escalation.md"

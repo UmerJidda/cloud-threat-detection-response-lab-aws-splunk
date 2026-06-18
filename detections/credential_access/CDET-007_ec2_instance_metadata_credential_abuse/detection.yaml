@@ -1,0 +1,102 @@
+---
+id: CDET-007
+name: "EC2 Instance Metadata Credential Exfiltration"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Credential Access"
+technique: "T1552"
+sub_technique: "T1552.005"
+technique_name: "Unsecured Credentials: Cloud Instance Metadata"
+
+severity: critical
+confidence: high
+risk_score: 85
+
+data_sources:
+  - cloudtrail
+  - guardduty
+splunk_index: aws_cloudtrail
+splunk_index_secondary: aws_alerts
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - userIdentity.type
+  - userIdentity.sessionContext.sessionIssuer.type
+  - sourceIPAddress
+  - awsRegion
+  - userIdentity.sessionContext.sessionIssuer.arn
+
+spl_file: detection.spl
+schedule: "*/5 * * * *"
+lookback: "-10m"
+suppress_fields:
+  - userIdentity.sessionContext.sessionIssuer.arn
+
+lookups:
+  - name: ec2_private_cidr_ranges
+    description: Private IP CIDR ranges used by EC2 instances in this environment
+    file: splunk/lookups/ec2_private_cidr_ranges.csv
+  - name: approved_iam_principals
+    description: EC2 instance roles authorized to be called from external IPs (e.g., NAT gateway egress IPs)
+    file: splunk/lookups/approved_iam_principals.csv
+
+false_positive_notes: |
+  EC2 instances that egress through a NAT gateway will appear with the NAT
+  gateway's public IP as the sourceIPAddress rather than the instance's private
+  IP. The NAT gateway's Elastic IP addresses should be added to the
+  ec2_private_cidr_ranges lookup (despite being public IPs) to suppress these.
+
+  EC2 instances in public subnets with auto-assigned public IPs may also trigger
+  if the Elastic IP / public IP is not in the lookup. Build and maintain the
+  ec2_private_cidr_ranges lookup from your VPC configuration.
+
+  The GuardDuty corroborating branch of this detection has near-zero false
+  positives — GuardDuty's InstanceCredentialExfiltration finding type is
+  specifically designed for this scenario.
+
+test_cases:
+  - name: "EC2 role used from external IP not matching known NAT/public pool"
+    input_file: "data/samples/cloudtrail_ec2_role_external_ip.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "GuardDuty InstanceCredentialExfiltration finding"
+    input_file: "data/samples/guardduty_instancecredentialexfiltration.ndjson"
+    expected_alert: true
+    expected_severity: critical
+    note: "This branch uses the aws_alerts index, not aws_cloudtrail"
+
+  - name: "EC2 role used from known NAT gateway IP"
+    input_file: "data/samples/cloudtrail_ec2_role_nat_gateway.ndjson"
+    expected_alert: false
+    suppression_reason: "Source IP in ec2_private_cidr_ranges (NAT gateway EIP)"
+
+playbook: "incident_response/playbooks/CDET-007_ec2_metadata_credential_abuse.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Immediate page to on-call security engineer"
+
+validation:
+  trigger_conditions:
+    - "Branch A: userIdentity.type=AssumedRole AND sessionIssuer.type=EC2Instance AND sourceIPAddress not in ec2_private_cidr_ranges"
+    - "Branch B: GuardDuty finding_type contains InstanceCredentialExfiltration"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - detection_branch
+    - instance_role_arn
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Branch A fires on EC2 role used from non-EC2 IP"
+    - "Branch B fires on GuardDuty InstanceCredentialExfiltration finding"
+    - "Branch A suppressed for known NAT gateway IPs"
+  attack_simulation_mapping:
+    atomic_test: "T1552.005 - Cloud Instance Metadata API"
+    simulation_file: "attack_simulation/scenarios/SIM-007_imds_credential_theft.md"

@@ -1,0 +1,90 @@
+# Cloud Threat Detection Lab - Configuration Template
+# Copy this file to lab_config.yaml and fill in your values.
+# lab_config.yaml is gitignored — never commit real credentials.
+
+# ─────────────────────────────────────────────
+# Splunk Configuration
+# ─────────────────────────────────────────────
+splunk:
+  host: "splunk.your-lab.internal"       # Splunk hostname or IP
+  port: 8089                              # Management port (REST API)
+  username: "admin"
+  # Password via environment variable: SPLUNK_PASSWORD
+  app: "search"                           # Default app context
+  index_aws_cloudtrail: "aws_cloudtrail"  # Index name for CloudTrail events
+  index_aws_guardduty: "aws_guardduty"    # Index name for GuardDuty findings
+  index_aws_flowlogs: "aws_vpc_flow"      # Index name for VPC Flow Logs
+  index_aws_s3access: "aws_s3_access"     # Index name for S3 access logs
+  verify_ssl: false                       # Set true in production
+
+# ─────────────────────────────────────────────
+# AWS Configuration
+# ─────────────────────────────────────────────
+# Credentials are resolved automatically by boto3's default credential chain.
+# Run `aws configure` before using any collector or automation script.
+# Never hardcode credentials here or anywhere in the repository.
+aws:
+  region: "us-east-1"
+  account_id: "123456789012"             # Your lab AWS account ID
+  cloudtrail_bucket: "my-lab-cloudtrail-logs"
+  guardduty_detector_id: "abc123def456"
+  log_archive_bucket: "my-lab-log-archive"
+
+# ─────────────────────────────────────────────
+# AWS Collector Settings
+# ─────────────────────────────────────────────
+collectors:
+  output_dir: "data/collected"           # Local directory for normalized collector output
+  cloudtrail:
+    lookback_hours: 24                   # Hours of CloudTrail history to retrieve
+    max_results: 1000                    # Max events per LookupEvents call
+  guardduty:
+    severity_threshold: 4.0             # Minimum severity score to collect (1-10 scale)
+  securityhub:
+    severity_labels:                     # AWS severity labels to include
+      - "CRITICAL"
+      - "HIGH"
+      - "MEDIUM"
+  iam:
+    include_inline_policies: true
+    include_managed_policies: true
+
+# ─────────────────────────────────────────────
+# Detection Settings
+# ─────────────────────────────────────────────
+detections:
+  default_severity: "medium"
+  alert_suppression_window_minutes: 60
+  # Accounts/roles excluded from privilege escalation detections (e.g., break-glass)
+  excluded_iam_roles:
+    - "arn:aws:iam::123456789012:role/BreakGlassRole"
+  # CIDRs considered internal / trusted
+  trusted_cidr_ranges:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+
+# ─────────────────────────────────────────────
+# Automation / Response Settings
+# ─────────────────────────────────────────────
+automation:
+  dry_run: true                          # Set false to enable live response actions
+  sns_topic_arn: "arn:aws:sns:us-east-1:123456789012:SecurityAlerts"
+  isolation_security_group_id: "sg-00000000000000001"  # SG used to isolate EC2
+  response_lambda_role_arn: "arn:aws:iam::123456789012:role/SecurityResponseRole"
+
+# ─────────────────────────────────────────────
+# Notification Settings
+# ─────────────────────────────────────────────
+notifications:
+  slack_webhook_url: ""                  # Optional: Slack webhook for alert forwarding
+  email_recipients:
+    - "security-team@your-org.com"
+
+# ─────────────────────────────────────────────
+# Lab Environment Settings
+# ─────────────────────────────────────────────
+lab:
+  environment: "lab"                     # lab | staging | production
+  log_level: "INFO"                      # DEBUG | INFO | WARNING | ERROR
+  validation_mode: true                  # Enables additional validation logging

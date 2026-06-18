@@ -1,0 +1,98 @@
+---
+id: CDET-009
+name: "S3 Bucket Replication Configured to External Account"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Exfiltration"
+technique: "T1537"
+sub_technique: ""
+technique_name: "Transfer Data to Cloud Account"
+
+severity: high
+confidence: high
+risk_score: 75
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.replicationConfiguration
+  - requestParameters.bucketName
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_aws_accounts
+    description: Account IDs approved as replication destinations
+    file: splunk/lookups/approved_aws_accounts.csv
+  - name: approved_iam_principals
+    description: Principals authorized to configure S3 replication
+    file: splunk/lookups/approved_iam_principals.csv
+
+false_positive_notes: |
+  Cross-account S3 replication is legitimately used for:
+  - Disaster recovery to a secondary account
+  - Log archival to a centralized log account
+  - Data sharing with approved partner accounts
+
+  All legitimate destination account IDs must be in the approved_aws_accounts lookup.
+  Any destination account not in the lookup is a potential exfiltration attempt.
+
+test_cases:
+  - name: "S3 replication configured to unknown external account"
+    input_file: "data/samples/cloudtrail_s3_replication_external.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "S3 replication to approved DR account"
+    input_file: "data/samples/cloudtrail_s3_replication_approved_dr.ndjson"
+    expected_alert: false
+    suppression_reason: "Destination account in approved_aws_accounts lookup"
+
+playbook: "incident_response/playbooks/CDET-009_s3_replication_external.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team"
+  - type: manual
+    description: "Remove replication configuration from affected bucket immediately"
+
+validation:
+  trigger_conditions:
+    - "eventName=PutBucketReplication"
+    - "destination account ID extracted from replicationConfiguration"
+    - "destination account NOT in approved_aws_accounts"
+    - "errorCode is null"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - bucket_name
+    - destination_bucket_arn
+    - destination_account_id
+    - principal_arn
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Fires when destination account is not in approved_aws_accounts"
+    - "Does not fire when destination account is approved"
+    - "Correctly extracts destination account ID from replication configuration JSON"
+  attack_simulation_mapping:
+    atomic_test: "T1537 - Transfer Data to Cloud Account"
+    simulation_file: "attack_simulation/scenarios/SIM-009_s3_replication.md"

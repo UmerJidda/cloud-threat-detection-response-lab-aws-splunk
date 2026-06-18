@@ -1,0 +1,106 @@
+---
+id: CDET-014
+name: "CloudTrail Log File Deleted from S3"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Defense Evasion"
+technique: "T1070.004"
+sub_technique: ""
+technique_name: "Indicator Removal: File Deletion"
+
+severity: critical
+confidence: high
+risk_score: 85
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.bucketName
+  - requestParameters.key
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/5 * * * *"
+lookback: "-15m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to delete from the CloudTrail S3 bucket (should be empty or very limited)
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: cloudtrail_log_buckets
+    description: S3 bucket names that contain CloudTrail log files
+    file: splunk/lookups/cloudtrail_log_buckets.csv
+
+false_positive_notes: |
+  There are almost no legitimate reasons for a human operator to delete individual
+  CloudTrail log files from S3. S3 lifecycle policies (AWSService user identity type)
+  are the only expected deletion source, and these are explicitly excluded.
+
+  The cloudtrail_log_buckets.csv lookup is required for this detection to work. It must
+  contain all bucket names configured as CloudTrail delivery targets.
+
+  Rotation-based deletion (e.g., enforcing a 90-day retention window via S3 lifecycle
+  policies) generates DeleteObject events with userIdentity.type=AWSService and will
+  not trigger this detection.
+
+  This detection intentionally has minimal suppression — any human or role deletion of
+  CloudTrail log files is highly suspicious and warrants investigation.
+
+test_cases:
+  - name: "CloudTrail log file deleted by human principal"
+    input_file: "data/samples/cloudtrail_s3_delete_cloudtrail_log.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "S3 lifecycle policy deletes old CloudTrail log"
+    input_file: "data/samples/cloudtrail_s3_lifecycle_delete_cloudtrail.ndjson"
+    expected_alert: false
+    suppression_reason: "userIdentity.type=AWSService excluded"
+
+  - name: "CloudTrail bucket deleted entirely"
+    input_file: "data/samples/cloudtrail_s3_deletebucket_cloudtrail.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+playbook: "incident_response/playbooks/CDET-014_cloudtrail_log_deletion.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "P0 notification — immediate response required"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (DeleteObject, DeleteObjects, DeleteBucket)"
+    - "bucket in cloudtrail_log_buckets lookup"
+    - "userIdentity.type != AWSService"
+    - "principal not in approved_iam_principals"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - bucket_name
+    - object_key
+    - estimated_logs_deleted
+    - region
+  pass_criteria:
+    - "Fires on any manual deletion from CloudTrail log bucket"
+    - "Fires on entire bucket deletion"
+    - "Does NOT fire on AWSService lifecycle deletions"
+  attack_simulation_mapping:
+    atomic_test: "T1070.004 - Indicator Removal: File Deletion"
+    simulation_file: "attack_simulation/scenarios/SIM-014_cloudtrail_log_deletion.md"

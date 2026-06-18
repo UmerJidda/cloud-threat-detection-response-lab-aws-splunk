@@ -1,0 +1,16 @@
+{
+  "detection_id": "CDET-006",
+  "alert_title": "[CDET-006] Root Account Activity",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Privilege Escalation",
+  "technique": "T1078.004",
+  "technique_name": "Valid Accounts: Cloud Accounts",
+  "eventName": "CreateUser",
+  "root_action_category": "IAM Modification",
+  "mfa_used": "No",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

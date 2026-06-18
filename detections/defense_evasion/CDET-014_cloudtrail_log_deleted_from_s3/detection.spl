@@ -1,0 +1,58 @@
+`aws_cloudtrail_index`
+`timeframe_15m`
+eventName IN (DeleteObject, DeleteObjects, DeleteBucket)
+eventSource="s3.amazonaws.com"
+NOT errorCode=*
+
+`comment("Exclude S3 lifecycle policy deletions — these are expected automated behavior")`
+| where userIdentity.type!="AWSService"
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       bucket_name=coalesce(
+           'requestParameters.bucketName',
+           'requestParameters.Bucket',
+           "unknown"
+       ),
+       object_key=coalesce('requestParameters.key', "bucket-level-operation"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       `comment("Estimate log count for DeleteObjects batch operations")`
+       estimated_logs_deleted=case(
+           eventName="DeleteObjects", 100,
+           eventName="DeleteBucket",  1000,
+           true(),                    1
+       )
+
+`comment("Only alert on deletions from known CloudTrail log delivery buckets")`
+| lookup cloudtrail_log_buckets bucket_name AS bucket_name OUTPUT is_cloudtrail_bucket, trail_name
+| where is_cloudtrail_bucket="true"
+
+`comment("Suppress the small set of approved principals (e.g., backup/archival tool)")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| eval suppressed=if(approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("CloudTrail log deletion is always critical — no severity gradation")`
+| eval severity="critical",
+       urgency=1,
+       detection_id="CDET-014",
+       confidence="high",
+       tactic="Defense Evasion",
+       technique="T1070.004",
+       technique_name="Indicator Removal: File Deletion",
+       alert_title="[CDET-014] CloudTrail Log File Deleted from S3",
+       `comment("Classify the specific type of deletion for IR context")`
+       deletion_type=case(
+           eventName="DeleteBucket",   "CRITICAL: Entire CloudTrail log bucket deleted",
+           eventName="DeleteObjects",  "HIGH: Batch CloudTrail log deletion",
+           true(),                      "Single CloudTrail log file deleted"
+       )
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, deletion_type, principal_arn, principal_type, session_issuer_arn,
+         bucket_name, trail_name, object_key, estimated_logs_deleted,
+         event_source_ip, region
+| sort -urgency, _time

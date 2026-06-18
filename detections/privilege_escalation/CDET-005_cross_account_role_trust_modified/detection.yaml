@@ -1,0 +1,113 @@
+---
+id: CDET-005
+name: "Cross-Account Role Trust Relationship Created or Modified"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Privilege Escalation"
+technique: "T1484"
+sub_technique: "T1484.002"
+technique_name: "Domain or Tenant Policy Modification: Trust Modification"
+
+severity: high
+confidence: medium
+risk_score: 65
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.roleName
+  - requestParameters.assumeRolePolicyDocument
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_aws_accounts
+    description: Account IDs trusted to assume roles in this environment
+    file: splunk/lookups/approved_aws_accounts.csv
+  - name: approved_iam_principals
+    description: Principals authorized to modify role trust policies
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: CI/CD roles that manage cross-account trust as part of IaC
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  Cross-account role trust modifications are common in multi-account environments.
+  The following trigger frequently and must be suppressed via the approved_aws_accounts
+  lookup:
+  - AWS services (config.amazonaws.com, lambda.amazonaws.com) as trust principals
+  - Organizational sibling accounts in approved hub-spoke architectures
+  - AWS SSO / IAM Identity Center service account IDs
+
+  The approved_aws_accounts.csv lookup is the primary suppression mechanism.
+  Any account ID regularly seen in trust policies but not yet in the lookup
+  should be investigated and documented before being added.
+
+test_cases:
+  - name: "Role created with trust to unknown external account"
+    input_file: "data/samples/cloudtrail_iam_createrole_external_trust.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Existing role trust updated to include unknown account"
+    input_file: "data/samples/cloudtrail_iam_updateassumerolepolicy_external.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Role created with trust to approved AWS service"
+    input_file: "data/samples/cloudtrail_iam_createrole_service_trust.ndjson"
+    expected_alert: false
+    suppression_reason: "Service principal (amazonaws.com) is in approved_aws_accounts"
+
+  - name: "Role trust updated to approved sibling account"
+    input_file: "data/samples/cloudtrail_iam_updateassumerolepolicy_approved.ndjson"
+    expected_alert: false
+    suppression_reason: "Account ID in approved_aws_accounts lookup"
+
+playbook: "incident_response/playbooks/CDET-005_cross_account_trust_modified.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (CreateRole, UpdateAssumeRolePolicy)"
+    - "trust policy document contains an AWS account ID"
+    - "account ID NOT in approved_aws_accounts lookup"
+    - "creator NOT in approved_iam_principals or automation_role_arns"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - role_name
+    - external_account_id
+    - trust_principal
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Fires when role trust is set to unknown external account"
+    - "Fires on UpdateAssumeRolePolicy adding external account"
+    - "Does not fire for AWS service principals (amazonaws.com)"
+    - "Does not fire for approved account IDs in lookup"
+  attack_simulation_mapping:
+    atomic_test: "T1484.002 - Modify Cloud Tenant Trust"
+    simulation_file: "attack_simulation/scenarios/SIM-005_cross_account_trust.md"

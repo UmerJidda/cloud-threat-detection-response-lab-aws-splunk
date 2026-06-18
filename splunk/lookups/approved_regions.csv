@@ -1,0 +1,6 @@
+region,approved,description,date_added,added_by
+us-east-1,true,US East (N. Virginia) — primary region,2024-01-15,security-team
+us-west-2,true,US West (Oregon) — secondary region,2024-01-15,security-team
+eu-west-1,true,Europe (Ireland) — EMEA region,2024-01-15,security-team
+ap-southeast-1,false,Asia Pacific (Singapore) — not in use,2024-01-15,security-team
+ap-northeast-1,false,Asia Pacific (Tokyo) — not in use,2024-01-15,security-team

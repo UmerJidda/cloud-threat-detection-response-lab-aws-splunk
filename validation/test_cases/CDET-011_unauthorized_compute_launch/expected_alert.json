@@ -1,0 +1,23 @@
+{
+  "detection_id": "CDET-011",
+  "alert_title": "[CDET-011] Unauthorized Compute Resource Launch",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Execution",
+  "technique": "T1204.003",
+  "technique_name": "User Execution: Malicious Image",
+  "eventName": "RunInstances",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "principal_type": "IAMUser",
+  "session_issuer_arn": null,
+  "instance_type": "p3.16xlarge",
+  "instance_count": 5,
+  "is_suspicious_type": "true",
+  "abuse_category": "crypto_mining",
+  "function_name": null,
+  "function_runtime": null,
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

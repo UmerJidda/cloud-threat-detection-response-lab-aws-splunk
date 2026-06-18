@@ -1,0 +1,158 @@
+# MITRE ATT&CK v15 — Detection Coverage Mappings
+# Maps each ATT&CK technique to its detection ID(s) in this repository.
+# Reference: https://attack.mitre.org/matrices/enterprise/cloud/
+
+version: "15.1"
+framework: "MITRE ATT&CK"
+platform: "IaaS (AWS)"
+last_updated: "2026-06-15"
+
+tactics:
+
+  - tactic_id: "TA0001"
+    tactic_name: "Initial Access"
+    techniques:
+      - technique_id: "T1078.004"
+        technique_name: "Valid Accounts: Cloud Accounts"
+        detections:
+          - id: "DETECT-0001"
+            name: "Impossible Travel - IAM Console Login"
+            file: "detections/initial_access/DETECT-0001_impossible_travel_iam_login.yaml"
+            status: "active"
+            confidence: "high"
+
+  - tactic_id: "TA0003"
+    tactic_name: "Persistence"
+    techniques:
+      - technique_id: "T1098.001"
+        technique_name: "Account Manipulation: Additional Cloud Credentials"
+        detections:
+          - id: "DETECT-0002"
+            name: "New IAM Access Key Created for Existing User"
+            file: "detections/persistence/DETECT-0002_new_iam_access_key.yaml"
+            status: "active"
+            confidence: "high"
+      - technique_id: "T1136.003"
+        technique_name: "Create Account: Cloud Account"
+        detections:
+          - id: "DETECT-0003"
+            name: "New IAM User or Role Created"
+            file: "detections/persistence/DETECT-0003_new_iam_user_or_role.yaml"
+            status: "active"
+            confidence: "high"
+
+  - tactic_id: "TA0004"
+    tactic_name: "Privilege Escalation"
+    techniques:
+      - technique_id: "T1078.004"
+        technique_name: "Valid Accounts (Escalation via Policy Attachment)"
+        detections:
+          - id: "DETECT-0004"
+            name: "IAM Privilege Escalation via Policy Attachment"
+            file: "detections/privilege_escalation/DETECT-0004_iam_privilege_escalation.yaml"
+            status: "active"
+            confidence: "high"
+
+  - tactic_id: "TA0005"
+    tactic_name: "Defense Evasion"
+    techniques:
+      - technique_id: "T1562.008"
+        technique_name: "Impair Defenses: Disable Cloud Logs"
+        detections:
+          - id: "DETECT-0005"
+            name: "CloudTrail Logging Disabled or Stopped"
+            file: "detections/defense_evasion/DETECT-0005_cloudtrail_disabled.yaml"
+            status: "active"
+            confidence: "critical"
+      - technique_id: "T1070.004"
+        technique_name: "Indicator Removal: File Deletion"
+        detections:
+          - id: "DETECT-0006"
+            name: "S3 Bucket or CloudTrail Trail Deleted"
+            file: "detections/defense_evasion/DETECT-0006_s3_trail_deletion.yaml"
+            status: "active"
+            confidence: "high"
+
+  - tactic_id: "TA0006"
+    tactic_name: "Credential Access"
+    techniques:
+      - technique_id: "T1552.005"
+        technique_name: "Unsecured Credentials: Cloud Instance Metadata"
+        detections:
+          - id: "DETECT-0007"
+            name: "EC2 Instance Metadata Service Abuse"
+            file: "detections/credential_access/DETECT-0007_imds_abuse.yaml"
+            status: "active"
+            confidence: "medium"
+
+  - tactic_id: "TA0007"
+    tactic_name: "Discovery"
+    techniques:
+      - technique_id: "T1580"
+        technique_name: "Cloud Infrastructure Discovery"
+        detections:
+          - id: "DETECT-0008"
+            name: "Excessive Cloud API Enumeration"
+            file: "detections/discovery/DETECT-0008_cloud_api_enumeration.yaml"
+            status: "active"
+            confidence: "medium"
+
+  - tactic_id: "TA0008"
+    tactic_name: "Lateral Movement"
+    techniques:
+      - technique_id: "T1550.001"
+        technique_name: "Use Alternate Authentication Material: Application Access Token"
+        detections:
+          - id: "DETECT-0009"
+            name: "Cross-Account Role Assumption Chain"
+            file: "detections/lateral_movement/DETECT-0009_cross_account_role_chain.yaml"
+            status: "active"
+            confidence: "medium"
+
+  - tactic_id: "TA0010"
+    tactic_name: "Exfiltration"
+    techniques:
+      - technique_id: "T1537"
+        technique_name: "Transfer Data to Cloud Account"
+        detections:
+          - id: "DETECT-0010"
+            name: "S3 Bucket Replication to External Account"
+            file: "detections/exfiltration/DETECT-0010_s3_external_replication.yaml"
+            status: "active"
+            confidence: "high"
+
+  - tactic_id: "TA0040"
+    tactic_name: "Impact"
+    techniques:
+      - technique_id: "T1485"
+        technique_name: "Data Destruction"
+        detections:
+          - id: "DETECT-0011"
+            name: "Mass S3 Object Deletion"
+            file: "detections/impact/DETECT-0011_mass_s3_deletion.yaml"
+            status: "active"
+            confidence: "high"
+      - technique_id: "T1496"
+        technique_name: "Resource Hijacking"
+        detections:
+          - id: "DETECT-0012"
+            name: "Anomalous EC2 Instance Launch (Cryptomining Pattern)"
+            file: "detections/impact/DETECT-0012_ec2_resource_hijacking.yaml"
+            status: "active"
+            confidence: "medium"
+
+# Coverage summary (auto-maintained)
+coverage_summary:
+  total_techniques_covered: 12
+  total_detections: 12
+  active_detections: 12
+  tactics_covered:
+    - "Initial Access"
+    - "Persistence"
+    - "Privilege Escalation"
+    - "Defense Evasion"
+    - "Credential Access"
+    - "Discovery"
+    - "Lateral Movement"
+    - "Exfiltration"
+    - "Impact"

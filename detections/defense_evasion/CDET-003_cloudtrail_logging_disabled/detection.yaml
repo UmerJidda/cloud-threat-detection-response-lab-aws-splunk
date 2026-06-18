@@ -1,0 +1,108 @@
+---
+id: CDET-003
+name: "CloudTrail Logging Disabled or Trail Deleted"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Defense Evasion"
+technique: "T1562"
+sub_technique: "T1562.008"
+technique_name: "Impair Defenses: Disable Cloud Logs"
+
+severity: critical
+confidence: high
+risk_score: 90
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - userIdentity.type
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/5 * * * *"
+lookback: "-10m"
+suppress_fields: []
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to modify CloudTrail configuration (extremely narrow list)
+    file: splunk/lookups/approved_iam_principals.csv
+
+false_positive_notes: |
+  Near-zero legitimate false positives for StopLogging and DeleteTrail.
+
+  UpdateTrail generates higher FP volume because it is used for legitimate
+  configuration changes (e.g., enabling log file validation, changing S3 prefix,
+  enabling CloudWatch Logs integration). The detection restricts UpdateTrail
+  alerts to changes that disable logging-related features: EnableLogFileValidation
+  set to false, or IsMultiRegionTrail set to false.
+
+  If your environment uses automated configuration management that periodically
+  calls UpdateTrail, add the managing role to approved_iam_principals with a
+  documented business justification. Scrutinize any such suppression carefully —
+  this detection covers a critical blind spot.
+
+test_cases:
+  - name: "StopLogging called by unknown principal"
+    input_file: "data/samples/cloudtrail_stoplogging.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "DeleteTrail called by unknown principal"
+    input_file: "data/samples/cloudtrail_deletetrail.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "UpdateTrail disabling log file validation"
+    input_file: "data/samples/cloudtrail_updatetrail_disable_validation.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "UpdateTrail benign change (prefix update)"
+    input_file: "data/samples/cloudtrail_updatetrail_benign.ndjson"
+    expected_alert: false
+    note: "S3 prefix changes alone do not indicate logging impairment"
+
+playbook: "incident_response/playbooks/CDET-003_cloudtrail_logging_disabled.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Immediate SNS notification to security team and manager"
+  - type: manual
+    description: "Re-enable CloudTrail immediately; begin incident investigation"
+
+validation:
+  trigger_conditions:
+    - "eventName IN (StopLogging, DeleteTrail)"
+    - "OR eventName=UpdateTrail AND requestParameters indicate logging impairment"
+    - "eventSource=cloudtrail.amazonaws.com"
+    - "errorCode is null"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - trail_name
+    - event_source_ip
+    - region
+    - disable_reason
+  pass_criteria:
+    - "Fires on StopLogging from any non-approved principal"
+    - "Fires on DeleteTrail from any non-approved principal"
+    - "Fires on UpdateTrail that disables log file validation"
+    - "Does not fire on benign UpdateTrail changes"
+  attack_simulation_mapping:
+    atomic_test: "T1562.008 - Disable CloudTrail Logging"
+    simulation_file: "attack_simulation/scenarios/SIM-003_cloudtrail_disable.md"

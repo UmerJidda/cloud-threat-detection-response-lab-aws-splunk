@@ -1,0 +1,58 @@
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventSource="iam.amazonaws.com"
+eventName IN (CreateRole, UpdateAssumeRolePolicy)
+NOT errorCode=*
+
+| eval creator_arn=coalesce('userIdentity.arn', "unknown"),
+       creator_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       role_name=coalesce(
+           'requestParameters.roleName',
+           'requestParameters.roleArn',
+           "unknown"
+       ),
+       trust_policy=coalesce('requestParameters.assumeRolePolicyDocument', "{}"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("Extract account IDs from the trust policy document using regex")`
+`comment("Trust principals take the form arn:aws:iam::ACCOUNTID:root or arn:aws:sts::ACCOUNTID:*")`
+| rex field=trust_policy max_match=10 "arn:aws[^\"]*::(?P<trust_account_id>\d{12})"
+| rex field=trust_policy "\"AWS\":\s*\"(?P<trust_principal>[^\"]+)\""
+
+`comment("Filter out events with no external account ID in the trust policy")`
+| where isnotnull(trust_account_id)
+
+`comment("Skip AWS service principals — these end in .amazonaws.com and are not account IDs")`
+| where NOT match(trust_principal, "\.amazonaws\.com$")
+
+`comment("Check each extracted account ID against the approved accounts lookup")`
+| lookup approved_aws_accounts account_id AS trust_account_id OUTPUT approved AS account_approved
+| eval account_approved=coalesce(account_approved, "false")
+| where account_approved!="true"
+
+`comment("Suppress approved principals creating or modifying roles")`
+| lookup approved_iam_principals arn AS creator_arn OUTPUT approved
+| lookup automation_role_arns arn AS creator_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| where isnull(issuer_approved) OR issuer_approved!="true"
+
+| eval detection_id="CDET-005",
+       severity="high",
+       urgency=2,
+       confidence="medium",
+       tactic="Privilege Escalation",
+       technique="T1484.002",
+       technique_name="Domain or Tenant Policy Modification: Trust Modification",
+       external_account_id=trust_account_id,
+       alert_title="[CDET-005] Cross-Account Role Trust Relationship Created or Modified"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, role_name, trust_principal, external_account_id,
+         creator_arn, creator_type, event_source_ip, region
+| sort -_time

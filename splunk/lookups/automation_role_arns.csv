@@ -1,0 +1,4 @@
+arn,approved,description,environment,date_added,expiry_date,added_by,reason
+arn:aws:iam::123456789012:role/DeploymentPipelineRole,true,CI/CD deployment pipeline role,production,2024-01-15,,security-team,Authorized for CloudFormation and resource provisioning
+arn:aws:iam::123456789012:role/TerraformExecutionRole,true,Terraform IaC execution role,all,2024-01-15,,security-team,Infrastructure-as-code automation
+arn:aws:iam::123456789012:role/AutoScalingRole,true,EC2 Auto Scaling service role,production,2024-01-15,,security-team,Expected to launch EC2 instances

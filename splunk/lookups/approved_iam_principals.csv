@@ -1,0 +1,3 @@
+arn,approved,description,environment,date_added,expiry_date,added_by,reason
+arn:aws:iam::123456789012:user/example-approved-user,true,Example approved service account,production,2024-01-15,,security-team,Example entry — replace with actual principals
+arn:aws:iam::123456789012:role/SecurityAuditRole,true,Read-only security audit role,all,2024-01-15,,security-team,Read-only security tooling role

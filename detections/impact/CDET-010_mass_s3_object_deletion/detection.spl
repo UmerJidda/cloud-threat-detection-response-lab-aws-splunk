@@ -1,0 +1,78 @@
+`aws_cloudtrail_index`
+`timeframe_10m`
+eventName IN (DeleteObject, DeleteObjects, DeleteBucket, DeleteBucketPolicy,
+              DeleteBucketLifecycle, DeleteBucketEncryption)
+eventSource="s3.amazonaws.com"
+NOT errorCode=*
+
+`comment("Exclude AWS service-initiated deletions (lifecycle expiration, etc.)")`
+| where userIdentity.type!="AWSService"
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       bucket_name=coalesce(
+           'requestParameters.bucketName',
+           'requestParameters.Bucket',
+           "unknown"
+       ),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       `comment("DeleteObjects can delete up to 1000 objects per call — count actual objects")`
+       objects_in_call=case(
+           eventName="DeleteObjects",
+               coalesce(toint('requestParameters.Delete.Quiet'), 1) * 100,
+           eventName="DeleteBucket",
+               1000,
+           true(),
+               1
+       )
+
+`comment("Suppress approved data lifecycle roles before aggregating")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("Aggregate deletion activity per principal over the lookback window")`
+| stats
+    count                   AS total_delete_events,
+    sum(objects_in_call)    AS estimated_objects_deleted,
+    dc(bucket_name)         AS buckets_targeted,
+    values(bucket_name)     AS bucket_names,
+    values(eventName)       AS delete_operations,
+    first(event_source_ip)  AS event_source_ip,
+    first(region)           AS region,
+    first(principal_type)   AS principal_type
+    BY principal_arn
+
+`comment("Threshold: >= 100 estimated objects or >= 20 delete API calls in the window")`
+| where estimated_objects_deleted >= 100 OR total_delete_events >= 20
+
+`comment("Classify destruction severity by scope")`
+| eval destruction_scope=case(
+    buckets_targeted >= 5 OR estimated_objects_deleted >= 10000,
+        "catastrophic — multiple buckets or mass deletion",
+    buckets_targeted >= 2 OR estimated_objects_deleted >= 1000,
+        "severe — significant data volume affected",
+    true(),
+        "moderate — threshold exceeded"
+  )
+
+| eval bucket_names_str=mvjoin(bucket_names, ", ")
+
+| eval detection_id="CDET-010",
+       severity="critical",
+       urgency=1,
+       confidence="high",
+       tactic="Impact",
+       technique="T1485",
+       technique_name="Data Destruction",
+       alert_title="[CDET-010] Mass S3 Object Deletion Detected"
+
+| table detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         principal_arn, principal_type, destruction_scope,
+         total_delete_events, estimated_objects_deleted,
+         buckets_targeted, bucket_names_str, delete_operations,
+         event_source_ip, region
+| sort -estimated_objects_deleted

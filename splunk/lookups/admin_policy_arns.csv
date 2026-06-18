@@ -1,0 +1,6 @@
+policy_arn,policy_name,risk_level,date_added,added_by,reason
+arn:aws:iam::aws:policy/AdministratorAccess,AdministratorAccess,critical,2024-01-15,security-team,Full AWS administrator access
+arn:aws:iam::aws:policy/PowerUserAccess,PowerUserAccess,high,2024-01-15,security-team,Full access except IAM management
+arn:aws:iam::aws:policy/IAMFullAccess,IAMFullAccess,high,2024-01-15,security-team,Full IAM management access
+arn:aws:iam::aws:policy/SecurityAudit,SecurityAudit,low,2024-01-15,security-team,Read-only security audit — approved for security tooling
+arn:aws:iam::aws:policy/ReadOnlyAccess,ReadOnlyAccess,low,2024-01-15,security-team,Read-only access — generally approved

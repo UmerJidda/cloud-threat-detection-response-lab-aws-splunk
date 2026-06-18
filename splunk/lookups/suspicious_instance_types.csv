@@ -1,0 +1,20 @@
+instance_type,is_suspicious_type,abuse_category,date_added,added_by
+p2.xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p2.8xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p2.16xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p3.2xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p3.8xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p3.16xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+p4d.24xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g3.4xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g3.8xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g3.16xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.2xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.4xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.8xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.12xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+g4dn.16xlarge,true,cryptocurrency mining (GPU),2024-01-15,security-team
+c5.18xlarge,true,high-CPU abuse (scraping/bruteforce),2024-01-15,security-team
+c5.24xlarge,true,high-CPU abuse (scraping/bruteforce),2024-01-15,security-team
+c5n.18xlarge,true,high-CPU abuse (scraping/bruteforce),2024-01-15,security-team

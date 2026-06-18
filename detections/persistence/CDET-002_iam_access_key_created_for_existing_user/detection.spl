@@ -1,0 +1,61 @@
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventName=CreateAccessKey
+eventSource="iam.amazonaws.com"
+NOT errorCode=*
+
+`comment("Normalize creating principal and key recipient")`
+| eval creator_arn=coalesce('userIdentity.arn', "unknown"),
+       creator_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       key_owner_name=coalesce('requestParameters.userName', "unknown"),
+       new_access_key_id=coalesce('responseElements.accessKey.accessKeyId', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("Detect self-rotation: creator ARN ends with the key owner's username")`
+| eval self_rotation=if(
+    like(creator_arn, "%/" + key_owner_name),
+    "true",
+    "false"
+  )
+
+`comment("Suppress approved automation principals")`
+| lookup approved_iam_principals arn AS creator_arn OUTPUT approved
+| lookup automation_role_arns arn AS creator_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("Suppress session issuers that are approved pipeline roles")`
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| where isnull(issuer_approved) OR issuer_approved!="true"
+
+`comment("Look up whether the key recipient is a privileged user")`
+| lookup privileged_iam_users user_name AS key_owner_name OUTPUT is_privileged
+| eval is_privileged=coalesce(is_privileged, "false")
+
+`comment("Alert if: (1) third party is creating the key, or (2) key owner is privileged")`
+| where self_rotation="false" OR is_privileged="true"
+
+`comment("Escalate to high-confidence when a third party is creating the key (vs self-rotation on privileged)")`
+| eval confidence=case(
+    self_rotation="false" AND is_privileged="true", "high",
+    self_rotation="false" AND is_privileged="false", "high",
+    self_rotation="true" AND is_privileged="true", "medium",
+    true(), "medium"
+  )
+
+| eval detection_id="CDET-002",
+       severity="high",
+       urgency=2,
+       tactic="Persistence",
+       technique="T1098.001",
+       technique_name="Account Manipulation: Additional Cloud Credentials",
+       alert_title="[CDET-002] IAM Access Key Created for Existing User"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, creator_arn, creator_type, session_issuer_arn,
+         key_owner_name, new_access_key_id, self_rotation, is_privileged,
+         event_source_ip, region
+| sort -_time

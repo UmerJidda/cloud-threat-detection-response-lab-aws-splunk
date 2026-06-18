@@ -1,0 +1,97 @@
+`aws_cloudtrail_index`
+`timeframe_15m`
+eventName=AuthorizeSecurityGroupIngress
+eventSource="ec2.amazonaws.com"
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       group_id=coalesce('requestParameters.groupId', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("Suppress approved principals — deployment roles routinely open 443/80")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+| lookup automation_role_arns arn AS session_issuer_arn OUTPUT approved AS issuer_auto_approved
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| eval issuer_suppressed=if(issuer_auto_approved="true" OR issuer_approved="true", "true", "false")
+| where issuer_suppressed!="true"
+
+`comment("Extract IP permission fields from the nested ipPermissions structure")`
+| spath input=_raw path=requestParameters.ipPermissions{} output=ip_perms
+| mvexpand ip_perms
+| spath input=ip_perms path=fromPort output=from_port
+| spath input=ip_perms path=toPort output=to_port
+| spath input=ip_perms path=ipProtocol output=ip_protocol
+| spath input=ip_perms path=ipRanges{}.cidrIp output=cidr_ipv4
+| spath input=ip_perms path=ipv6Ranges{}.cidrIpv6 output=cidr_ipv6
+
+| eval from_port=coalesce(toint(from_port), -1),
+       to_port=coalesce(toint(to_port), -1),
+       ip_protocol=coalesce(ip_protocol, "tcp"),
+       cidr_ipv4=coalesce(cidr_ipv4, ""),
+       cidr_ipv6=coalesce(cidr_ipv6, "")
+
+`comment("Identify publicly accessible ranges (0.0.0.0/0 or ::/0)")`
+| eval is_public=if(
+    like(cidr_ipv4, "0.0.0.0/0") OR like(cidr_ipv6, "::/0"),
+    "true", "false"
+  ),
+  cidr_range=if(like(cidr_ipv4, "0.0.0.0/0"), "0.0.0.0/0",
+                if(like(cidr_ipv6, "::/0"), "::/0", coalesce(cidr_ipv4, cidr_ipv6)))
+
+`comment("Check approved_cidr_ranges for exceptions (e.g., corporate proxy addresses listed as /24)")`
+| lookup approved_cidr_ranges cidr AS cidr_range OUTPUT approved AS cidr_approved
+| eval cidr_approved=coalesce(cidr_approved, "false")
+
+| where is_public="true" AND cidr_approved!="true"
+
+`comment("Classify port risk — admin/database ports to 0.0.0.0/0 are highest risk")`
+| eval high_risk_port=case(
+    from_port=22 OR to_port=22 OR (from_port<=22 AND to_port>=22),
+        "SSH (22) — critical exposure",
+    from_port=3389 OR to_port=3389 OR (from_port<=3389 AND to_port>=3389),
+        "RDP (3389) — critical exposure",
+    from_port=3306 OR to_port=3306,
+        "MySQL (3306) — database exposure",
+    from_port=5432 OR to_port=5432,
+        "PostgreSQL (5432) — database exposure",
+    from_port=1433 OR to_port=1433,
+        "MSSQL (1433) — database exposure",
+    from_port=27017 OR to_port=27017,
+        "MongoDB (27017) — database exposure",
+    from_port=6379 OR to_port=6379,
+        "Redis (6379) — cache exposure",
+    ip_protocol="-1" OR from_port=-1,
+        "All traffic — full exposure",
+    true(),
+        "other"
+  ),
+  severity=case(
+    like(high_risk_port, "SSH%") OR like(high_risk_port, "RDP%") OR like(high_risk_port, "All traffic%"),
+        "critical",
+    like(high_risk_port, "MySQL%") OR like(high_risk_port, "PostgreSQL%") OR like(high_risk_port, "MSSQL%") OR like(high_risk_port, "MongoDB%") OR like(high_risk_port, "Redis%"),
+        "critical",
+    true(),
+        "high"
+  )
+
+| eval urgency=case(severity="critical", 1, true(), 2),
+       detection_id="CDET-013",
+       confidence="high",
+       tactic="Defense Evasion",
+       technique="T1562.007",
+       technique_name="Impair Defenses: Disable or Modify Cloud Firewall",
+       alert_title="[CDET-013] Security Group Opened to Public Internet"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, principal_arn, principal_type, session_issuer_arn,
+         group_id, from_port, to_port, ip_protocol, cidr_range,
+         high_risk_port, event_source_ip, region
+| sort -urgency, _time

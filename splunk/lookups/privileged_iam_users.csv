@@ -1,0 +1,3 @@
+username,arn,privilege_level,justification,date_added,expiry_date,added_by,review_date
+example-admin,arn:aws:iam::123456789012:user/example-admin,admin,Break-glass emergency admin account,2024-01-15,2025-01-15,security-team,2024-07-15
+cicd-service-account,arn:aws:iam::123456789012:user/cicd-service-account,deployment,CI/CD pipeline service account,2024-01-15,,platform-team,2024-07-15

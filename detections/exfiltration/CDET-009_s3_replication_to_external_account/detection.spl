@@ -1,0 +1,50 @@
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventName=PutBucketReplication
+eventSource="s3.amazonaws.com"
+NOT errorCode=*
+
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       bucket_name=coalesce('requestParameters.bucketName', "unknown"),
+       replication_config='requestParameters.replicationConfiguration',
+       event_source_ip='sourceIPAddress',
+       region='awsRegion'
+
+`comment("Extract destination bucket ARN from replication configuration JSON")`
+`comment("Replication config structure: {Rules:[{Destination:{Bucket:arn:aws:s3:::bucket-name}}]}")`
+| rex field=replication_config "\"Bucket\":\s*\"(?P<destination_bucket_arn>arn:aws:s3[^\"]+)\""
+
+`comment("Extract destination account ID — present in cross-account replication configs")`
+| rex field=replication_config "\"Account\":\s*\"(?P<destination_account_id>\d{12})\""
+
+`comment("If Account field is absent, try to infer from bucket ARN (may not be present for same-account)")`
+| eval destination_account_id=coalesce(destination_account_id, "same-account-or-unknown")
+
+`comment("Filter out same-account replication (no cross-account risk)")`
+| where destination_account_id!="same-account-or-unknown"
+
+`comment("Check destination account against approved list")`
+| lookup approved_aws_accounts account_id AS destination_account_id OUTPUT approved AS dest_approved
+| eval dest_approved=coalesce(dest_approved, "false")
+| where dest_approved!="true"
+
+`comment("Suppress approved principals")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved
+| where isnull(approved) OR approved!="true"
+
+| eval detection_id="CDET-009",
+       severity="high",
+       urgency=2,
+       confidence="high",
+       tactic="Exfiltration",
+       technique="T1537",
+       technique_name="Transfer Data to Cloud Account",
+       alert_title="[CDET-009] S3 Bucket Replication Configured to External Account"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, bucket_name, destination_bucket_arn, destination_account_id,
+         principal_arn, principal_type, event_source_ip, region
+| sort -_time

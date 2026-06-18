@@ -1,0 +1,112 @@
+---
+id: CDET-001
+name: "IAM User Created Outside Approved Pipeline"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+# ── ATT&CK ──────────────────────────────────────────────────────────────────
+tactic: "Persistence"
+technique: "T1136"
+sub_technique: "T1136.003"
+technique_name: "Create Account: Cloud Account"
+
+# ── Risk ────────────────────────────────────────────────────────────────────
+severity: high
+confidence: medium
+risk_score: 60
+
+# ── Data Requirements ────────────────────────────────────────────────────────
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - userIdentity.type
+  - sourceIPAddress
+  - awsRegion
+  - requestParameters.userName
+
+# ── Search Configuration ─────────────────────────────────────────────────────
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+
+# ── Suppression Lookups ──────────────────────────────────────────────────────
+lookups:
+  - name: approved_iam_principals
+    description: IAM ARNs belonging to approved user-provisioning pipelines
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: CI/CD and automation roles excluded from identity detections
+    file: splunk/lookups/automation_role_arns.csv
+
+# ── False Positive Notes ─────────────────────────────────────────────────────
+false_positive_notes: |
+  Infrastructure-as-code pipelines (Terraform, CDK, CloudFormation) create IAM
+  users as part of stack provisioning. Add the pipeline execution role ARN to
+  approved_iam_principals.csv with reason="IaC provisioning pipeline".
+
+  Break-glass or emergency access workflows that create temporary privileged
+  users will also trigger. These should be documented and the creating role
+  added to the suppression lookup with an expiry_date.
+
+# ── Test Cases ───────────────────────────────────────────────────────────────
+test_cases:
+  - name: "CreateUser from unknown interactive principal"
+    input_file: "data/samples/cloudtrail_iam_createuser_unknown.ndjson"
+    expected_alert: true
+    expected_severity: high
+    expected_fields:
+      eventName: "CreateUser"
+      severity: "high"
+
+  - name: "CreateUser from approved IaC pipeline role"
+    input_file: "data/samples/cloudtrail_iam_createuser_pipeline.ndjson"
+    expected_alert: false
+    suppression_reason: "approved_iam_principals lookup match"
+
+  - name: "CreateUser with failed authorization"
+    input_file: "data/samples/cloudtrail_iam_createuser_denied.ndjson"
+    expected_alert: false
+    note: "AccessDenied events should not alert — detection targets successful creation only"
+
+# ── Response ─────────────────────────────────────────────────────────────────
+playbook: "incident_response/playbooks/CDET-001_iam_user_created_outside_pipeline.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Send SNS notification to security team"
+  - type: manual
+    description: "Review created user permissions and disable if unauthorized"
+
+# ── Validation Requirements ──────────────────────────────────────────────────
+validation:
+  trigger_conditions:
+    - "eventName=CreateUser with eventSource=iam.amazonaws.com"
+    - "userIdentity.arn NOT in approved_iam_principals lookup"
+    - "errorCode is null (successful creation only)"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - created_user_name
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Alert fires on unknown principal creating user"
+    - "Alert suppressed on approved pipeline principal"
+    - "Alert does not fire on AccessDenied events"
+  attack_simulation_mapping:
+    atomic_test: "T1136.003 - Create Cloud Account"
+    simulation_file: "attack_simulation/scenarios/SIM-001_iam_user_creation.md"

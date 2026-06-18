@@ -1,0 +1,97 @@
+---
+id: CDET-006
+name: "Root Account API or Console Activity"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Initial Access"
+technique: "T1078"
+sub_technique: "T1078.004"
+technique_name: "Valid Accounts: Cloud Accounts"
+secondary_techniques:
+  - technique: "T1078"
+    sub_technique: "T1078.003"
+    technique_name: "Valid Accounts: Local Accounts"
+
+severity: critical
+confidence: high
+risk_score: 88
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - userIdentity.type
+  - eventName
+  - sourceIPAddress
+  - awsRegion
+  - additionalEventData.MFAUsed
+
+spl_file: detection.spl
+schedule: "*/5 * * * *"
+lookback: "-10m"
+suppress_fields: []
+
+lookups: []
+
+false_positive_notes: |
+  The only legitimate root account activity patterns are:
+  - Initial account setup (new account, first-time billing configuration)
+  - Specific root-only operations: changing account settings, closing the account,
+    modifying billing contact, changing support plan, enabling IAM access to billing
+
+  These operations are extremely infrequent. Any root activity not matching one of
+  these narrow purposes should be treated as suspicious until proven otherwise.
+
+  AWS recommends that the root account have no access keys and MFA enabled. If root
+  activity is frequent in your environment, the root account is being misused and
+  that is itself a finding requiring remediation.
+
+test_cases:
+  - name: "Root account console login"
+    input_file: "data/samples/cloudtrail_root_consolelogin.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "Root account API call (any action)"
+    input_file: "data/samples/cloudtrail_root_api_call.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "Root account failed login attempt"
+    input_file: "data/samples/cloudtrail_root_consolelogin_failed.ndjson"
+    expected_alert: true
+    expected_severity: critical
+    note: "Failed root logins are also critical — they indicate someone attempting root access"
+
+playbook: "incident_response/playbooks/CDET-006_root_account_activity.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Immediate SNS notification and page to on-call security engineer"
+
+validation:
+  trigger_conditions:
+    - "userIdentity.type=Root"
+    - "Any eventName (no filtering)"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - mfa_used
+    - event_source_ip
+    - region
+    - root_action_category
+  pass_criteria:
+    - "Fires on any event with userIdentity.type=Root"
+    - "Fires on failed root console logins"
+    - "No false positive suppression — any root activity is notable"
+  attack_simulation_mapping:
+    atomic_test: "T1078.004 - Cloud Root Account Usage"
+    simulation_file: "attack_simulation/scenarios/SIM-006_root_usage.md"

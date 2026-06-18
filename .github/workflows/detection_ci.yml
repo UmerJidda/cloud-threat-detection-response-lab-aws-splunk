@@ -1,0 +1,142 @@
+name: Detection CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Python lint and type check
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run ruff linter
+        run: ruff check .
+
+      - name: Run ruff formatter check
+        run: ruff format --check .
+
+      - name: Run mypy type check
+        run: mypy scripts/ automation/ --ignore-missing-imports
+
+  # ─────────────────────────────────────────────
+  # Job 2: Unit tests
+  # ─────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/unit/ \
+            --cov=scripts \
+            --cov=automation \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -v
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ─────────────────────────────────────────────
+  # Job 3: Detection schema validation
+  # ─────────────────────────────────────────────
+  validate-detections:
+    name: Validate Detection YAML
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate detection YAML schemas
+        run: python scripts/validation/validate_detection_schema.py --dir detections/
+
+      - name: Validate MITRE mappings
+        run: python scripts/validation/validate_mitre_mappings.py
+
+      - name: Check detection ID uniqueness
+        run: python scripts/validation/check_detection_ids.py
+
+  # ─────────────────────────────────────────────
+  # Job 4: SPL syntax check
+  # ─────────────────────────────────────────────
+  spl-syntax:
+    name: SPL Syntax Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Extract and validate SPL from detection YAMLs
+        run: python scripts/validation/validate_spl_syntax.py --dir detections/
+
+  # ─────────────────────────────────────────────
+  # Job 5: Security scan (secret detection)
+  # ─────────────────────────────────────────────
+  security-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

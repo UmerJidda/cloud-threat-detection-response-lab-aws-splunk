@@ -1,0 +1,17 @@
+{
+  "detection_id": "CDET-007",
+  "alert_title": "[CDET-007] EC2 Metadata Credential Abuse",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Credential Access",
+  "technique": "T1552.005",
+  "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
+  "detection_source": "CloudTrail",
+  "principal_arn": "arn:aws:sts::123456789012:assumed-role/WebAppRole/i-0abcdef1234567890",
+  "instance_id": "i-0abcdef1234567890",
+  "session_issuer_arn": "arn:aws:iam::123456789012:role/WebAppRole",
+  "event_source_ip": "203.0.113.55",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

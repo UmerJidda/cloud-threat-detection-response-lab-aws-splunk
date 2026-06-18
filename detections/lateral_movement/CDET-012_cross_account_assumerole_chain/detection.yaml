@@ -1,0 +1,110 @@
+---
+id: CDET-012
+name: "Cross-Account AssumeRole Chain"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Lateral Movement"
+technique: "T1550.001"
+sub_technique: "T1550.001"
+technique_name: "Use Alternate Authentication Material: Application Access Token"
+
+severity: high
+confidence: medium
+risk_score: 68
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - userIdentity.type
+  - userIdentity.sessionContext.sessionIssuer.arn
+  - requestParameters.roleArn
+  - requestParameters.roleSessionName
+  - sourceIPAddress
+  - awsRegion
+  - recipientAccountId
+
+spl_file: detection.spl
+schedule: "*/30 * * * *"
+lookback: "-1h"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_aws_accounts
+    description: Authorized AWS account IDs for cross-account access
+    file: splunk/lookups/approved_aws_accounts.csv
+  - name: approved_iam_principals
+    description: Principals authorized for cross-account assume role operations
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: Pipeline and automation roles expected to perform cross-account assumes
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  Cross-account role assumption is extremely common in multi-account AWS environments
+  for logging aggregation, security tooling (GuardDuty, Security Hub, Config), and
+  deployment pipelines. Nearly all automation_role_arns will produce this event.
+
+  The key signal is a CHAIN — an assumed role (AssumedRole session) that then
+  assumes into a role in a THIRD account that is not in approved_aws_accounts.
+  Legitimate automation typically has a predictable, well-documented cross-account
+  path. Unknown intermediate account pivoting is the anomaly.
+
+  Also watch for: high velocity of distinct target accounts from the same source
+  within a short window (breadth-first account traversal pattern).
+
+test_cases:
+  - name: "Unknown principal assumes role in non-approved account"
+    input_file: "data/samples/cloudtrail_sts_assumerole_foreign_acct.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Assumed role (chained) assumes into additional non-approved account"
+    input_file: "data/samples/cloudtrail_sts_assumerole_chain.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Approved pipeline role assumes role in approved account"
+    input_file: "data/samples/cloudtrail_sts_assumerole_approved.ndjson"
+    expected_alert: false
+    suppression_reason: "automation_role_arns + approved_aws_accounts lookup match"
+
+playbook: "incident_response/playbooks/CDET-012_cross_account_assumerole.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team with target account details"
+
+validation:
+  trigger_conditions:
+    - "eventName=AssumeRole"
+    - "target account not in approved_aws_accounts"
+    - "principal not in approved_iam_principals or automation_role_arns"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - principal_arn
+    - principal_type
+    - target_role_arn
+    - target_account_id
+    - is_chained_assumption
+    - distinct_target_accounts
+    - region
+  pass_criteria:
+    - "Fires on AssumeRole into unapproved account"
+    - "Fires when an AssumedRole session then assumes into another account"
+    - "Suppressed for known pipeline roles assuming into approved accounts"
+  attack_simulation_mapping:
+    atomic_test: "T1550.001 - Cross-account role assumption"
+    simulation_file: "attack_simulation/scenarios/SIM-012_cross_account_assumerole.md"

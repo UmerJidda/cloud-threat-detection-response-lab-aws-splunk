@@ -1,0 +1,5 @@
+cidr,description,vpc_id,environment,date_added,added_by
+10.0.0.0/8,RFC1918 private range — class A,all,all,2024-01-15,security-team
+172.16.0.0/12,RFC1918 private range — class B,all,all,2024-01-15,security-team
+192.168.0.0/16,RFC1918 private range — class C,all,all,2024-01-15,security-team
+169.254.0.0/16,EC2 instance metadata service and link-local,all,all,2024-01-15,security-team

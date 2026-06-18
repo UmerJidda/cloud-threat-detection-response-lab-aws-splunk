@@ -1,0 +1,23 @@
+{
+  "detection_id": "CDET-013",
+  "alert_title": "[CDET-013] Security Group Opened to Internet",
+  "severity": "critical",
+  "urgency": 1,
+  "confidence": "high",
+  "tactic": "Defense Evasion",
+  "technique": "T1562.007",
+  "technique_name": "Impair Defenses: Disable or Modify Cloud Firewall",
+  "eventName": "AuthorizeSecurityGroupIngress",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "principal_type": "IAMUser",
+  "session_issuer_arn": null,
+  "group_id": "sg-0abc123def456789",
+  "from_port": 22,
+  "to_port": 22,
+  "ip_protocol": "tcp",
+  "cidr_range": "0.0.0.0/0",
+  "high_risk_port": "true",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

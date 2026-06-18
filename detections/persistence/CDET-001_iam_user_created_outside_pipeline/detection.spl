@@ -1,0 +1,57 @@
+| tstats `summariesonly` count
+    FROM datamodel=Change
+    WHERE nodename=All_Changes.Account_Management
+        All_Changes.action=created
+        All_Changes.src_user_type!=unknown
+    BY All_Changes.src_user, All_Changes.object, _time span=1m
+| `drop_dm_object_name("All_Changes")`
+
+`comment("Fall back to raw events when data model is not accelerated")`
+
+`aws_cloudtrail_index`
+`timeframe_30m`
+eventName=CreateUser
+eventSource="iam.amazonaws.com"
+NOT errorCode=*
+
+`comment("Normalize acting principal — AssumedRole sessions carry ARN in arn field, IAMUser in arn field, Root has no arn")`
+| eval principal_arn=coalesce('userIdentity.arn', "unknown"),
+       principal_type='userIdentity.type',
+       session_issuer_arn=coalesce('userIdentity.sessionContext.sessionIssuer.arn', "none"),
+       created_user_name=coalesce('requestParameters.userName', "unknown"),
+       event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       mfa_used=coalesce('additionalEventData.MFAAuthenticated', "false")
+
+`comment("Suppress principals in the approved IaC / provisioning pipeline lookup")`
+| lookup approved_iam_principals arn AS principal_arn OUTPUT approved, suppression_reason
+| lookup automation_role_arns arn AS principal_arn OUTPUT approved AS auto_approved
+| eval suppressed=if(approved="true" OR auto_approved="true", "true", "false")
+| where suppressed!="true"
+
+`comment("Also suppress if the session was issued by an approved role (e.g., Terraform running via AssumedRole)")`
+| lookup approved_iam_principals arn AS session_issuer_arn OUTPUT approved AS issuer_approved
+| where isnull(issuer_approved) OR issuer_approved!="true"
+
+`comment("Evaluate combined risk: no-MFA interactive logins are higher confidence")`
+| eval confidence=case(
+    principal_type="IAMUser" AND mfa_used="false", "high",
+    principal_type="IAMUser" AND mfa_used="true",  "medium",
+    principal_type="AssumedRole",                   "medium",
+    true(),                                          "low"
+  )
+
+`comment("Attach detection metadata")`
+| eval detection_id="CDET-001",
+       severity="high",
+       urgency=2,
+       tactic="Persistence",
+       technique="T1136.003",
+       technique_name="Create Account: Cloud Account",
+       alert_title="[CDET-001] IAM User Created Outside Approved Pipeline"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, principal_arn, principal_type, session_issuer_arn,
+         created_user_name, event_source_ip, region, mfa_used
+| sort -_time

@@ -1,0 +1,51 @@
+`aws_cloudtrail_index`
+`timeframe_10m`
+`root_activity`
+
+| eval event_source_ip='sourceIPAddress',
+       region='awsRegion',
+       mfa_used=coalesce('additionalEventData.MFAAuthenticated', "false"),
+       login_result=coalesce('responseElements.ConsoleLogin', "N/A"),
+       user_agent='userAgent'
+
+`comment("Classify root activity by risk category")`
+| eval root_action_category=case(
+    eventName="ConsoleLogin" AND login_result="Success",
+        "Root console login — interactive console access",
+    eventName="ConsoleLogin" AND login_result="Failure",
+        "Root console login FAILED — brute force or credential testing attempt",
+    eventName IN ("CreateAccessKey", "UpdateAccessKey", "DeleteAccessKey"),
+        "Root access key operation — root should have no access keys",
+    eventName IN ("StopLogging", "DeleteTrail"),
+        "Root disabling CloudTrail — extreme risk",
+    eventName IN ("CreateUser", "AttachUserPolicy", "PutUserPolicy"),
+        "Root IAM mutation — creating backdoor via root",
+    eventName IN ("GetAccountSummary", "ListUsers", "ListRoles"),
+        "Root enumeration — reconnaissance via root credentials",
+    true(),
+        "Root API call: " + eventName
+  )
+
+`comment("Assign elevated severity if root is performing destructive or evasion actions")`
+| eval severity=case(
+    eventName IN ("StopLogging", "DeleteTrail", "CreateAccessKey"),
+        "critical",
+    eventName="ConsoleLogin" AND login_result="Failure",
+        "high",
+    true(),
+        "critical"
+  )
+
+| eval detection_id="CDET-006",
+       urgency=case(severity="critical", 1, true(), 2),
+       confidence="high",
+       tactic="Initial Access",
+       technique="T1078.004",
+       technique_name="Valid Accounts: Cloud Accounts",
+       alert_title="[CDET-006] Root Account Activity Detected"
+
+| table _time, detection_id, alert_title, severity, urgency, confidence,
+         tactic, technique, technique_name,
+         eventName, root_action_category, login_result,
+         mfa_used, event_source_ip, region, user_agent
+| sort -_time

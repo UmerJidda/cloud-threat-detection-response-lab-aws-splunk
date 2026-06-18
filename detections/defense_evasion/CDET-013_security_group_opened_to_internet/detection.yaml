@@ -1,0 +1,111 @@
+---
+id: CDET-013
+name: "Security Group Opened to Public Internet"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Defense Evasion"
+technique: "T1562.007"
+sub_technique: "T1562.007"
+technique_name: "Impair Defenses: Disable or Modify Cloud Firewall"
+
+severity: high
+confidence: high
+risk_score: 72
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - requestParameters.groupId
+  - requestParameters.ipPermissions
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/10 * * * *"
+lookback: "-15m"
+suppress_fields:
+  - userIdentity.arn
+  - requestParameters.groupId
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to modify security group rules
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: approved_cidr_ranges
+    description: CIDRs that are approved for broad ingress (internal proxies, VPNs)
+    file: splunk/lookups/approved_cidr_ranges.csv
+  - name: automation_role_arns
+    description: Pipeline roles that may modify security groups during deployment
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  Many organizations have temporary 0.0.0.0/0 rules for specific services (load
+  balancers on port 443, bastion hosts on port 22). These should be captured in
+  approved_cidr_ranges.csv OR the principal should be in approved_iam_principals.
+
+  Critical distinction: opening port 22 (SSH), port 3389 (RDP), or database ports
+  (3306, 5432, 1433, 27017) to 0.0.0.0/0 is substantially higher risk than opening
+  port 443.
+
+  The `high_risk_port` eval field classifies findings by risk. Review and tune the
+  approved_cidr_ranges lookup with any legitimate broad-access CIDRs before
+  promoting to production.
+
+test_cases:
+  - name: "SSH (22) opened to 0.0.0.0/0 by unknown principal"
+    input_file: "data/samples/cloudtrail_sg_ingress_ssh_public.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+  - name: "HTTPS (443) opened to 0.0.0.0/0 by approved deployment role"
+    input_file: "data/samples/cloudtrail_sg_ingress_443_approved.ndjson"
+    expected_alert: false
+    suppression_reason: "approved_iam_principals lookup match"
+
+  - name: "All traffic (-1) opened to 0.0.0.0/0"
+    input_file: "data/samples/cloudtrail_sg_ingress_all_traffic_public.ndjson"
+    expected_alert: true
+    expected_severity: critical
+
+playbook: "incident_response/playbooks/CDET-013_security_group_public_access.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "SNS notification to security team with group ID and port details"
+
+validation:
+  trigger_conditions:
+    - "eventName=AuthorizeSecurityGroupIngress"
+    - "cidr=0.0.0.0/0 OR cidr=::/0"
+    - "principal not in approved_iam_principals or automation_role_arns"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - group_id
+    - from_port
+    - to_port
+    - ip_protocol
+    - cidr_range
+    - high_risk_port
+    - region
+  pass_criteria:
+    - "Fires on 0.0.0.0/0 ingress rule added to any security group"
+    - "Fires on ::/0 (IPv6) ingress rule"
+    - "Elevates to critical for known high-risk ports (22, 3389, db ports)"
+    - "Suppressed for approved deployment principals"
+  attack_simulation_mapping:
+    atomic_test: "T1562.007 - Disable Cloud Firewall"
+    simulation_file: "attack_simulation/scenarios/SIM-013_security_group_exposure.md"

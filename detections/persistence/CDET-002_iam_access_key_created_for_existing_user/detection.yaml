@@ -1,0 +1,116 @@
+---
+id: CDET-002
+name: "IAM Access Key Created for Existing User"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Persistence"
+technique: "T1098"
+sub_technique: "T1098.001"
+technique_name: "Account Manipulation: Additional Cloud Credentials"
+
+severity: high
+confidence: high
+risk_score: 72
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - userIdentity.type
+  - requestParameters.userName
+  - responseElements.accessKey.accessKeyId
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "*/15 * * * *"
+lookback: "-30m"
+suppress_fields:
+  - userIdentity.arn
+  - requestParameters.userName
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals authorized to create access keys programmatically
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: CI/CD and automation roles excluded from this detection
+    file: splunk/lookups/automation_role_arns.csv
+  - name: privileged_iam_users
+    description: Sensitive users whose key creation is always elevated severity
+    file: splunk/lookups/privileged_iam_users.csv
+
+false_positive_notes: |
+  Self-service key rotation: a user creating their own access key is the most
+  common FP. Consider adding a separate lower-severity branch for self-service
+  vs. a third-party creating the key.
+
+  Onboarding automation: new employee provisioning workflows often create both
+  a user (CreateUser) and an initial access key in the same pipeline run. These
+  pipelines should be in the automation_role_arns suppression lookup.
+
+  Key rotation tooling: automated key rotation tools (e.g., AWS Secrets Manager
+  rotation lambdas) generate CreateAccessKey events. The Lambda execution role
+  should be added to approved_iam_principals.
+
+test_cases:
+  - name: "Access key created by different principal than key owner"
+    input_file: "data/samples/cloudtrail_iam_createaccesskey_thirdparty.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Access key created for privileged user by any principal"
+    input_file: "data/samples/cloudtrail_iam_createaccesskey_privileged.ndjson"
+    expected_alert: true
+    expected_severity: high
+
+  - name: "Access key self-rotation by standard user"
+    input_file: "data/samples/cloudtrail_iam_createaccesskey_selfrotation.ndjson"
+    expected_alert: false
+    suppression_reason: "creator_arn == key_owner_arn — self-rotation excluded"
+
+  - name: "Access key created by approved key rotation lambda"
+    input_file: "data/samples/cloudtrail_iam_createaccesskey_automation.ndjson"
+    expected_alert: false
+    suppression_reason: "automation_role_arns lookup match"
+
+playbook: "incident_response/playbooks/CDET-002_iam_access_key_created_for_existing_user.md"
+response_actions:
+  - type: splunk_adaptive_response
+    action: notify
+    description: "Send SNS notification to security team"
+
+validation:
+  trigger_conditions:
+    - "eventName=CreateAccessKey"
+    - "errorCode is null"
+    - "creator ARN differs from key-owner ARN, OR key-owner is in privileged_iam_users lookup"
+    - "creator ARN not in approved_iam_principals or automation_role_arns lookups"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - eventName
+    - principal_arn
+    - key_owner_name
+    - new_access_key_id
+    - self_rotation
+    - event_source_ip
+    - region
+  pass_criteria:
+    - "Fires when a third party creates a key for another user"
+    - "Fires when a key is created for a user in the privileged_iam_users lookup regardless of who created it"
+    - "Does not fire for self-rotation by a non-privileged user"
+    - "Suppressed when creator is in automation lookups"
+  attack_simulation_mapping:
+    atomic_test: "T1098.001 - Add Cloud Account Access Key"
+    simulation_file: "attack_simulation/scenarios/SIM-002_access_key_creation.md"

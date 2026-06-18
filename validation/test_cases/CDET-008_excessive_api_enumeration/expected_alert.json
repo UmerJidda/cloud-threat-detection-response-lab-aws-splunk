@@ -1,0 +1,18 @@
+{
+  "detection_id": "CDET-008",
+  "alert_title": "[CDET-008] Excessive API Enumeration",
+  "severity": "medium",
+  "urgency": 3,
+  "confidence": "medium",
+  "tactic": "Discovery",
+  "technique": "T1526",
+  "technique_name": "Cloud Service Discovery",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "total_calls": 87,
+  "unique_api_calls": 12,
+  "enumeration_intensity": "high",
+  "top_apis": "ListBuckets,DescribeInstances,ListFunctions,GetCallerIdentity,ListRoles",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}

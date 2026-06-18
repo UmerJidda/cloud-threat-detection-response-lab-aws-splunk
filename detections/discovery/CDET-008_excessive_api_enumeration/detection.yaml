@@ -1,0 +1,105 @@
+---
+id: CDET-008
+name: "Excessive API Enumeration by Single Principal"
+version: "1.0.0"
+status: testing
+created: "2024-01-15"
+modified: "2024-01-15"
+author: "Detection Engineering"
+
+tactic: "Discovery"
+technique: "T1580"
+sub_technique: ""
+technique_name: "Cloud Infrastructure Discovery"
+secondary_techniques:
+  - technique: "T1087"
+    sub_technique: "T1087.004"
+    technique_name: "Account Discovery: Cloud Account"
+
+severity: medium
+confidence: medium
+risk_score: 44
+
+data_sources:
+  - cloudtrail
+splunk_index: aws_cloudtrail
+splunk_sourcetype: "aws:cloudtrail:normalized"
+required_fields:
+  - eventName
+  - userIdentity.arn
+  - userIdentity.type
+  - sourceIPAddress
+  - awsRegion
+
+spl_file: detection.spl
+schedule: "0 * * * *"
+lookback: "-2h"
+suppress_fields:
+  - userIdentity.arn
+
+lookups:
+  - name: approved_iam_principals
+    description: Principals (CSPM, SIEM connectors) expected to enumerate at high volume
+    file: splunk/lookups/approved_iam_principals.csv
+  - name: automation_role_arns
+    description: Scanning/monitoring automation roles excluded from this detection
+    file: splunk/lookups/automation_role_arns.csv
+
+false_positive_notes: |
+  This detection has significant FP potential in environments with active CSPM
+  (Cloud Security Posture Management) tools, AWS Config, Security Hub, or custom
+  compliance scanners. These tools enumerate resources continuously.
+
+  Mitigation options in priority order:
+  1. Add the scanning tool's execution role to automation_role_arns.csv
+  2. Raise thresholds if the volume justifies it (measure baseline first)
+  3. Add a userAgent filter for known scanner SDK signatures as a secondary suppression
+
+  Legitimate human usage: a developer or ops engineer manually describing resources
+  will rarely hit the 50-call threshold in a 1-hour window. Raising to 100+ calls
+  may be appropriate if automated scanning is extensively suppressed.
+
+test_cases:
+  - name: "Burst enumeration — 80 List/Describe calls across 8 services in 1 hour"
+    input_file: "data/samples/cloudtrail_discovery_burst_enumeration.ndjson"
+    expected_alert: true
+    expected_severity: medium
+
+  - name: "Low-volume API activity — 10 calls across 3 services"
+    input_file: "data/samples/cloudtrail_discovery_normal_activity.ndjson"
+    expected_alert: false
+    note: "Threshold not met"
+
+  - name: "CSPM tool scanning all resources"
+    input_file: "data/samples/cloudtrail_discovery_cspm_scan.ndjson"
+    expected_alert: false
+    suppression_reason: "Scanning role in automation_role_arns lookup"
+
+playbook: "incident_response/playbooks/CDET-008_excessive_api_enumeration.md"
+response_actions:
+  - type: manual
+    description: "Analyst review — correlate with other detections before escalating"
+
+validation:
+  trigger_conditions:
+    - "principal makes >= 50 enumeration API calls in 1 hour"
+    - "calls span >= 5 unique API names"
+    - "principal not in approved_iam_principals or automation_role_arns"
+  expected_alert_fields:
+    - detection_id
+    - severity
+    - tactic
+    - technique
+    - principal_arn
+    - total_calls
+    - unique_api_calls
+    - services_enumerated
+    - api_calls_sample
+    - region
+  pass_criteria:
+    - "Fires when threshold of 50 calls / 5 unique APIs is met"
+    - "Suppressed for approved scanning roles"
+    - "Does not fire for low-volume activity"
+  attack_simulation_mapping:
+    atomic_test: "T1580 - Cloud Infrastructure Discovery"
+    simulation_file: "attack_simulation/scenarios/SIM-008_discovery_burst.md"

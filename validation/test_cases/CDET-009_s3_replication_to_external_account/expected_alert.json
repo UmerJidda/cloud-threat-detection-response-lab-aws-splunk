@@ -1,0 +1,18 @@
+{
+  "detection_id": "CDET-009",
+  "alert_title": "[CDET-009] S3 Replication to External Account",
+  "severity": "high",
+  "urgency": 2,
+  "confidence": "high",
+  "tactic": "Exfiltration",
+  "technique": "T1537",
+  "technique_name": "Transfer Data to Cloud Account",
+  "eventName": "PutBucketReplication",
+  "principal_arn": "arn:aws:iam::123456789012:user/attacker",
+  "source_bucket": "sensitive-data-bucket",
+  "destination_account_id": "999888777666",
+  "destination_bucket_arn": "arn:aws:s3:::attacker-exfil-bucket",
+  "event_source_ip": "198.51.100.77",
+  "region": "us-east-1",
+  "_time": "2024-01-15T14:32:15Z"
+}
