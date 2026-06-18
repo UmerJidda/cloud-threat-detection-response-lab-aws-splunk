@@ -1,0 +1,10 @@
+{
+  "eventName": "AssumeRole",
+  "eventSource": "sts.amazonaws.com",
+  "sourceIPAddress": "203.0.113.10",
+  "userIdentity": {
+    "type": "AssumedRole",
+    "userName": "SampleUser"
+  },
+  "awsRegion": "ap-southeast-1"
+}
