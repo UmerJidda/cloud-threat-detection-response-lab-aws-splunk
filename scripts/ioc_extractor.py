@@ -214,9 +214,14 @@ class IoCExtractor:
         # Assumed-role session names (useful for pivot)
         for m in _ROLE_SESSION_RE.finditer(text):
             role_name, session_name = m.group(1), m.group(2)
-            self._add(ioc_map, IoCType.ASSUMED_ROLE_SESSION,
-                      f"{role_name}/{session_name}", ts, source_id,
-                      context={"role_name": role_name, "session_name": session_name})
+            self._add(
+                ioc_map,
+                IoCType.ASSUMED_ROLE_SESSION,
+                f"{role_name}/{session_name}",
+                ts,
+                source_id,
+                context={"role_name": role_name, "session_name": session_name},
+            )
 
     def _add(
         self,
@@ -257,9 +262,9 @@ class IoCExtractor:
 
 # ── unit-test examples ────────────────────────────────────────────────────────
 
+
 def _example_tests() -> None:
     """Illustrative assertions — run with pytest or directly."""
-    from datetime import timezone
     from scripts.cloudtrail_parser import CloudTrailParser
 
     raw = {

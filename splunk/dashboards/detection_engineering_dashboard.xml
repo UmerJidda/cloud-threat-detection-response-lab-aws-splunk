@@ -1,0 +1,245 @@
+<dashboard version="1.1" theme="dark">
+  <label>Detection Engineering Program — Health &amp; Coverage</label>
+  <description>Detection engineering program health dashboard covering validation status, MITRE ATT&amp;CK coverage metrics, false positive rates, and lookup table integrity for all 14 CDET detections.</description>
+  <refresh>3600</refresh>
+
+  <!-- ============================================================
+       ROW 1: Detection Coverage % + ATT&CK Tactic Coverage
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Detection Coverage %</title>
+      <single>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | eval is_active=if(status="Active", 1, 0)
+            | stats sum(is_active) AS active_count, count AS total_count
+            | eval coverage_pct=round((active_count / total_count) * 100, 1)
+            | fields coverage_pct
+          </query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[60,80]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">1</option>
+        <option name="unit">%</option>
+        <option name="underLabel">ACTIVE DETECTION COVERAGE (TARGET: 80%)</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ATT&amp;CK Tactic Coverage</title>
+      <table>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | stats count AS detection_count values(detection_id) AS detection_ids by tactic
+            | eval detection_ids=mvjoin(detection_ids, ", ")
+            | sort -detection_count
+            | rename tactic AS "ATT&amp;CK Tactic"
+                     detection_count AS "Detection Count"
+                     detection_ids AS "Detection IDs"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 2: Validation Status Matrix
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Validation Status Matrix</title>
+      <table>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | table detection_id name tactic technique status last_validated
+            | sort detection_id
+            | rename detection_id AS "Detection ID"
+                     name AS "Detection Name"
+                     tactic AS "ATT&amp;CK Tactic"
+                     technique AS "Technique"
+                     status AS "Status"
+                     last_validated AS "Last Validated"
+          </query>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"Active": "#53a051", "Testing": "#f8be34", "Deprecated": "#dc4e41", "Draft": "#5379af"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Detection ID">
+            <link target="_blank">/app/search/search?q=index%3Dcdet_validation_results%20detection_id%3D"$row.Detection ID$"&amp;earliest=-30d&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 3: Test Case Results + FP Rate by Detection
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Test Case Results — Last Validation Run</title>
+      <table>
+        <search>
+          <query>
+            index=cdet_validation_results earliest=-7d
+            | stats count AS total
+                    sum(eval(if(result="PASS",1,0))) AS passed
+                    sum(eval(if(result="FAIL",1,0))) AS failed
+                    by detection_id
+            | eval pass_rate=round((passed / total) * 100, 1)
+            | eval status=case(
+                pass_rate=100,         "ALL_PASS",
+                pass_rate &gt;= 80,       "MOSTLY_PASS",
+                pass_rate &gt;= 50,       "PARTIAL",
+                true(),                "FAILING"
+              )
+            | sort detection_id
+            | rename detection_id AS "Detection ID"
+                     total AS "Total Tests"
+                     passed AS "Passed"
+                     failed AS "Failed"
+                     pass_rate AS "Pass Rate %"
+                     status AS "Status"
+          </query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"ALL_PASS": "#53a051", "MOSTLY_PASS": "#f8be34", "PARTIAL": "#f1813f", "FAILING": "#dc4e41"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Detection ID">
+            <link target="_blank">/app/search/search?q=index%3Dcdet_validation_results%20detection_id%3D"$row.Detection ID$"&amp;earliest=-7d&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>False Positive Rate by Detection (Last 30 Days)</title>
+      <chart>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-30d
+            | eval is_fp=if(disposition="false_positive", 1, 0)
+            | stats sum(is_fp) AS fp_count, count AS total_alerts by detection_id
+            | eval fp_rate=round((fp_count / total_alerts) * 100, 1)
+            | sort -fp_rate
+            | rename detection_id AS "Detection ID", fp_rate AS "FP Rate %"
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.orientation">horizontal</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.text">False Positive Rate (%)</option>
+        <option name="charting.axisTitleY.text">Detection ID</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.seriesColors">["0x5379af"]</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 4: Validation Trend (30d)
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Detection Validation Trend (Last 30 Days)</title>
+      <chart>
+        <search>
+          <query>
+            index=cdet_validation_results earliest=-30d
+            | timechart span=1d count by result
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Date</option>
+        <option name="charting.axisTitleY.text">Test Count</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.seriesColors">["0x53a051","0xdc4e41","0xf8be34"]</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 5: Lookup Table Health + Recently Modified Detections
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Lookup Table Health</title>
+      <table>
+        <search>
+          <query>
+            | union
+              [| inputlookup approved_iam_principals.csv | eval lookup_name="approved_iam_principals.csv"]
+              [| inputlookup automation_role_arns.csv    | eval lookup_name="automation_role_arns.csv"]
+              [| inputlookup admin_policy_arns.csv       | eval lookup_name="admin_policy_arns.csv"]
+              [| inputlookup approved_aws_accounts.csv   | eval lookup_name="approved_aws_accounts.csv"]
+              [| inputlookup approved_cidr_ranges.csv    | eval lookup_name="approved_cidr_ranges.csv"]
+              [| inputlookup suspicious_instance_types.csv | eval lookup_name="suspicious_instance_types.csv"]
+              [| inputlookup approved_regions.csv        | eval lookup_name="approved_regions.csv"]
+              [| inputlookup cloudtrail_log_buckets.csv  | eval lookup_name="cloudtrail_log_buckets.csv"]
+            | stats count by lookup_name
+            | eval health=if(count=0, "EMPTY - ACTION REQUIRED", "OK (" . count . " entries)")
+            | eval status=if(count=0, "EMPTY", "OK")
+            | rename lookup_name AS "Lookup Table"
+                     count AS "Row Count"
+                     health AS "Status"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"EMPTY": "#dc4e41", "OK": "#53a051"}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Recently Modified Detections (Last 30 Days)</title>
+      <table>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | eval last_modified_epoch=strptime(last_modified, "%Y-%m-%d")
+            | where last_modified_epoch &gt;= relative_time(now(), "-30d")
+            | table detection_id name status last_modified
+            | sort -last_modified
+            | rename detection_id AS "Detection ID"
+                     name AS "Detection Name"
+                     status AS "Status"
+                     last_modified AS "Last Modified"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"Active": "#53a051", "Testing": "#f8be34", "Deprecated": "#dc4e41", "Draft": "#5379af"}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

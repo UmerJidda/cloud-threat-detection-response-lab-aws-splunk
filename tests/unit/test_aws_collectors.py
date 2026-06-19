@@ -9,18 +9,13 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 from scripts.aws_collectors.schema import (
     CloudTrailEvent,
     GuardDutyFinding,
-    IAMAccessKey,
-    IAMRole,
     IAMUser,
-    SecurityGroupRule,
-    SecurityHubFinding,
     Severity,
 )
 
@@ -28,6 +23,7 @@ from scripts.aws_collectors.schema import (
 # ─────────────────────────────────────────────────────────────────────
 # CloudTrail
 # ─────────────────────────────────────────────────────────────────────
+
 
 class TestCloudTrailCollectorNormalize:
     def _make_collector(self) -> object:
@@ -72,9 +68,7 @@ class TestCloudTrailCollectorNormalize:
 
     def test_normalize_returns_none_on_bad_json(self) -> None:
         collector = self._make_collector()
-        result = collector._normalize(
-            {"EventId": "x", "CloudTrailEvent": "not-json"}
-        )
+        result = collector._normalize({"EventId": "x", "CloudTrailEvent": "not-json"})
         assert result is None
 
     def test_normalize_captures_error_code(self) -> None:
@@ -92,6 +86,7 @@ class TestCloudTrailCollectorNormalize:
 # ─────────────────────────────────────────────────────────────────────
 # GuardDuty
 # ─────────────────────────────────────────────────────────────────────
+
 
 class TestGuardDutyCollectorNormalize:
     def _make_collector(self) -> object:
@@ -154,6 +149,7 @@ class TestGuardDutyCollectorNormalize:
 # Security Group
 # ─────────────────────────────────────────────────────────────────────
 
+
 class TestSecurityGroupCollectorNormalize:
     def _make_collector(self) -> object:
         from scripts.aws_collectors.security_group_collector import SecurityGroupCollector
@@ -213,6 +209,7 @@ class TestSecurityGroupCollectorNormalize:
 # ─────────────────────────────────────────────────────────────────────
 # Schema dataclasses
 # ─────────────────────────────────────────────────────────────────────
+
 
 class TestSchema:
     def test_severity_enum_values(self) -> None:

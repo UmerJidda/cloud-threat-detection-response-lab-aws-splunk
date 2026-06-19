@@ -53,20 +53,37 @@ log = logging.getLogger("cdet011")
 
 # GPU instance types that CDET-011 monitors for
 GPU_INSTANCE_TYPES = [
-    "p2.xlarge", "p2.8xlarge", "p2.16xlarge",
-    "p3.2xlarge", "p3.8xlarge", "p3.16xlarge",
+    "p2.xlarge",
+    "p2.8xlarge",
+    "p2.16xlarge",
+    "p3.2xlarge",
+    "p3.8xlarge",
+    "p3.16xlarge",
     "p4d.24xlarge",
-    "g3.4xlarge", "g3.8xlarge", "g3.16xlarge",
-    "g4dn.xlarge", "g4dn.2xlarge", "g4dn.4xlarge", "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
-    "g5.xlarge", "g5.2xlarge", "g5.4xlarge", "g5.8xlarge", "g5.12xlarge", "g5.16xlarge", "g5.48xlarge",
+    "g3.4xlarge",
+    "g3.8xlarge",
+    "g3.16xlarge",
+    "g4dn.xlarge",
+    "g4dn.2xlarge",
+    "g4dn.4xlarge",
+    "g4dn.8xlarge",
+    "g4dn.12xlarge",
+    "g4dn.16xlarge",
+    "g5.xlarge",
+    "g5.2xlarge",
+    "g5.4xlarge",
+    "g5.8xlarge",
+    "g5.12xlarge",
+    "g5.16xlarge",
+    "g5.48xlarge",
 ]
 
 # Safe test instance type (minimum cost, immediate termination)
 SAFE_TEST_INSTANCE_TYPE = "t3.micro"
 
-# Simulated attacker UserData (base64 encoded mining bootstrap — for realism)
+# Simulated attacker UserData (base64 encoded mining bootstrap - for realism)
 SIMULATED_MINER_USERDATA = base64.b64encode(b"""#!/bin/bash
-# SIMULATION ONLY — no actual mining occurs
+# SIMULATION ONLY - no actual mining occurs
 # Mimics the structure of a real crypto miner bootstrap script
 echo "$(date): CDET-011 simulation starting" >> /var/log/cdet011-sim.log
 # Real attacker command would be:
@@ -121,8 +138,7 @@ def check_gpu_quota(session: boto3.Session) -> None:
         sq = session.client("service-quotas")
         resp = sq.list_service_quotas(ServiceCode="ec2")
         gpu_quotas = [
-            q for q in resp.get("Quotas", [])
-            if any(gpu in q.get("QuotaName", "") for gpu in ["P ", "G ", "GPU"])
+            q for q in resp.get("Quotas", []) if any(gpu in q.get("QuotaName", "") for gpu in ["P ", "G ", "GPU"])
         ]
         if gpu_quotas:
             print("\nGPU-related Service Quotas:")
@@ -155,17 +171,13 @@ def get_latest_amazon_linux_ami(ec2_client) -> str | None:
 def get_default_subnet(ec2_client) -> str | None:
     """Find the default VPC's first available subnet."""
     try:
-        vpcs = ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
+        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
         if not vpcs["Vpcs"]:
             log.warning("No default VPC found")
             return None
         vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
-        subnets = ec2_client.describe_subnets(
-            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-        )
+        subnets = ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
         if subnets["Subnets"]:
             return subnets["Subnets"][0]["SubnetId"]
     except ClientError as e:
@@ -220,9 +232,7 @@ def dry_run_display(account_id: str, region: str) -> None:
     print("[DRY-RUN] No instances launched. Add --execute to launch a safe t3.micro test instance.")
 
 
-def launch_test_instance(
-    session: boto3.Session, account_id: str
-) -> str | None:
+def launch_test_instance(session: boto3.Session, account_id: str) -> str | None:
     """Launch a single t3.micro and return instance ID."""
     ec2 = session.client("ec2")
 
@@ -265,7 +275,8 @@ def launch_test_instance(
         instance_type = resp["Instances"][0]["InstanceType"]
         log.info(
             "Instance launched: %s (type: %s) — CloudTrail RunInstances event generated",
-            instance_id, instance_type,
+            instance_id,
+            instance_type,
         )
         return instance_id
 
@@ -309,14 +320,18 @@ def create_test_lambda(session: boto3.Session, account_id: str, region: str) -> 
     try:
         resp = iam.create_role(
             RoleName=role_name,
-            AssumeRolePolicyDocument=json.dumps({
-                "Version": "2012-10-17",
-                "Statement": [{
-                    "Effect": "Allow",
-                    "Principal": {"Service": "lambda.amazonaws.com"},
-                    "Action": "sts:AssumeRole",
-                }],
-            }),
+            AssumeRolePolicyDocument=json.dumps(
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                            "Action": "sts:AssumeRole",
+                        }
+                    ],
+                }
+            ),
             Description="CDET-011 security test role",
             Tags=[{"Key": "Purpose", "Value": "CDET-011-security-test"}],
         )
@@ -352,7 +367,9 @@ def handler(event, context):
 """)
     )
 
-    import io, zipfile
+    import io
+    import zipfile
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("index.py", function_code.decode())
@@ -366,8 +383,8 @@ def handler(event, context):
             Role=role_arn,
             Handler="index.handler",
             Code={"ZipFile": zip_bytes},
-            Timeout=900,       # Maximum — attacker wants longest mining window
-            MemorySize=3008,   # Maximum vCPU allocation
+            Timeout=900,  # Maximum — attacker wants longest mining window
+            MemorySize=3008,  # Maximum vCPU allocation
             Description="CDET-011 security test — simulated unauthorized function",
             Tags={"Purpose": "CDET-011-security-test"},
         )

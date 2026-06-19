@@ -34,12 +34,10 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import sys
 import urllib.request
 import urllib.error
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -62,6 +60,7 @@ IMDS_TIMEOUT_SECONDS = 2
 # ---------------------------------------------------------------------------
 # IMDS check (safe — only checks metadata, does NOT retrieve credentials)
 # ---------------------------------------------------------------------------
+
 
 def is_running_on_ec2() -> bool:
     """Check if we are running on an EC2 instance by probing the IMDS endpoint."""
@@ -112,9 +111,7 @@ def check_imdsv1_enabled() -> dict:
             if resp.status == 200:
                 result["imdsv1_accessible"] = True
                 result["instance_id"] = resp.read().decode()
-                log.warning(
-                    "IMDSv1 is ACCESSIBLE — instance is vulnerable to SSRF-based credential theft"
-                )
+                log.warning("IMDSv1 is ACCESSIBLE — instance is vulnerable to SSRF-based credential theft")
                 log.warning("Instance ID: %s", result["instance_id"])
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
@@ -166,6 +163,7 @@ def check_imdsv1_enabled() -> dict:
 # Account-wide IMDS assessment
 # ---------------------------------------------------------------------------
 
+
 def enumerate_imdsv1_instances(
     ec2_client,
     region: str,
@@ -201,14 +199,16 @@ def enumerate_imdsv1_instances(
                     is_imdsv1 = http_tokens == "optional" and http_endpoint == "enabled"
 
                     if is_imdsv1 and state == "running":
-                        vulnerable_instances.append({
-                            "instance_id": instance_id,
-                            "name": name,
-                            "state": state,
-                            "http_tokens": http_tokens,
-                            "role_arn": role_arn,
-                            "private_ip": instance.get("PrivateIpAddress", "N/A"),
-                        })
+                        vulnerable_instances.append(
+                            {
+                                "instance_id": instance_id,
+                                "name": name,
+                                "state": state,
+                                "http_tokens": http_tokens,
+                                "role_arn": role_arn,
+                                "private_ip": instance.get("PrivateIpAddress", "N/A"),
+                            }
+                        )
     except ClientError as exc:
         log.error("Cannot enumerate EC2 instances: %s", exc)
 
@@ -244,13 +244,15 @@ def list_instance_profiles_with_permissions(iam_client) -> list[dict]:
                     except ClientError:
                         privileged_policies = []
 
-                    profiles.append({
-                        "profile_name": profile["InstanceProfileName"],
-                        "role_name": role_name,
-                        "role_arn": role["Arn"],
-                        "privileged_policies": privileged_policies,
-                        "is_high_value": len(privileged_policies) > 0,
-                    })
+                    profiles.append(
+                        {
+                            "profile_name": profile["InstanceProfileName"],
+                            "role_name": role_name,
+                            "role_arn": role["Arn"],
+                            "privileged_policies": privileged_policies,
+                            "is_high_value": len(privileged_policies) > 0,
+                        }
+                    )
     except ClientError as exc:
         log.error("Cannot enumerate instance profiles: %s", exc)
 
@@ -260,6 +262,7 @@ def list_instance_profiles_with_permissions(iam_client) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Remediation report
 # ---------------------------------------------------------------------------
+
 
 def print_remediation_report(
     imds_result: dict,
@@ -303,7 +306,9 @@ def print_remediation_report(
     log.info("")
     high_value = [p for p in profiles if p["is_high_value"]]
     if high_value:
-        log.warning("[INFO] %d high-privilege instance profile(s) — prime targets if IMDSv1 is enabled:", len(high_value))
+        log.warning(
+            "[INFO] %d high-privilege instance profile(s) — prime targets if IMDSv1 is enabled:", len(high_value)
+        )
         for p in high_value:
             log.warning(
                 "  Profile: %s | Role: %s | Policies: %s",
@@ -331,6 +336,7 @@ def print_remediation_report(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -406,8 +412,10 @@ def main() -> int:
         if result["on_ec2"]:
             if result["imdsv1_accessible"]:
                 log.warning("FINDING: IMDSv1 is enabled — this instance is vulnerable")
-                log.warning("Fix: aws ec2 modify-instance-metadata-options --instance-id %s --http-tokens required",
-                            result.get("instance_id", "<instance-id>"))
+                log.warning(
+                    "Fix: aws ec2 modify-instance-metadata-options --instance-id %s --http-tokens required",
+                    result.get("instance_id", "<instance-id>"),
+                )
             else:
                 log.info("IMDSv2 is enforced on this instance — not vulnerable")
         return 0

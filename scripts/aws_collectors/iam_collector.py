@@ -20,7 +20,7 @@ Permissions required (read-only):
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Iterator
 
 import structlog
@@ -89,16 +89,12 @@ class IAMCollector(BaseCollector):
             self._log.error("iam_list_users_failed", error=str(exc))
             raise
 
-    def _collect_access_keys(
-        self, iam: object, user_name: str
-    ) -> Iterator[IAMAccessKey]:
+    def _collect_access_keys(self, iam: object, user_name: str) -> Iterator[IAMAccessKey]:
         try:
             paginator = iam.get_paginator("list_access_keys")
             for page in paginator.paginate(UserName=user_name):
                 for key in page.get("AccessKeyMetadata", []):
-                    last_used_data = self._get_key_last_used(
-                        iam, key["AccessKeyId"]
-                    )
+                    last_used_data = self._get_key_last_used(iam, key["AccessKeyId"])
                     yield IAMAccessKey(
                         access_key_id=key["AccessKeyId"],
                         user_name=user_name,
@@ -109,9 +105,7 @@ class IAMCollector(BaseCollector):
                         last_used_service=last_used_data.get("ServiceName"),
                     )
         except ClientError as exc:
-            self._log.warning(
-                "iam_list_access_keys_failed", user=user_name, error=str(exc)
-            )
+            self._log.warning("iam_list_access_keys_failed", user=user_name, error=str(exc))
 
     def _get_key_last_used(self, iam: object, key_id: str) -> dict:
         try:

@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable
 
 import structlog
 
@@ -31,6 +31,7 @@ from scripts.cloudtrail_parser import ParsedEvent
 logger = structlog.get_logger(__name__)
 
 # ── result types ──────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ValidationResult:
@@ -66,10 +67,12 @@ class Validator:
 
 # ── suppression lookups (loaded at module level from splunk/lookups/) ─────────
 
+
 def _load_csv_column(path: Path, column: str) -> frozenset[str]:
     if not path.exists():
         return frozenset()
     import csv
+
     values: set[str] = set()
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
@@ -101,10 +104,12 @@ def _is_approved(event: ParsedEvent) -> bool:
 
 # ── per-detection detector functions ─────────────────────────────────────────
 
+
 def _detect_001(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-001: IAM user created by non-pipeline principal."""
     return [
-        e for e in events
+        e
+        for e in events
         if e.event_name == "CreateUser"
         and e.event_source == "iam.amazonaws.com"
         and not e.is_error
@@ -115,7 +120,8 @@ def _detect_001(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_002(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-002: Access key created for a different user (not self-service)."""
     return [
-        e for e in events
+        e
+        for e in events
         if e.event_name == "CreateAccessKey"
         and e.event_source == "iam.amazonaws.com"
         and not e.is_error
@@ -127,7 +133,8 @@ def _detect_002(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_003(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-003: CloudTrail logging disabled or trail deleted."""
     return [
-        e for e in events
+        e
+        for e in events
         if e.event_source == "cloudtrail.amazonaws.com"
         and e.event_name in {"StopLogging", "DeleteTrail"}
         and not e.is_error
@@ -137,7 +144,8 @@ def _detect_003(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_004(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-004: Admin policy attached to IAM principal."""
     return [
-        e for e in events
+        e
+        for e in events
         if e.event_name in {"AttachUserPolicy", "AttachRolePolicy", "AttachGroupPolicy"}
         and e.event_source == "iam.amazonaws.com"
         and not e.is_error
@@ -158,6 +166,7 @@ def _detect_005(events: list[ParsedEvent]) -> list[ParsedEvent]:
         else:
             policy_str = str(policy_doc)
         import re
+
         account_ids = set(re.findall(r'"arn:aws[^"]*:([0-9]{12}):[^"]*"', policy_str))
         external = account_ids - _APPROVED_ACCOUNTS - {e.identity_account_id or ""}
         if external:
@@ -173,10 +182,8 @@ def _detect_006(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_007(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-007: EC2 metadata credentials used from external/routable IP."""
     import ipaddress
-    _PRIVATE = [
-        ipaddress.ip_network(n) for n in
-        ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"]
-    ]
+
+    _PRIVATE = [ipaddress.ip_network(n) for n in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"]]
     results = []
     for e in events:
         if e.identity_type != "AssumedRole" or not e.session_issuer_arn:
@@ -224,6 +231,7 @@ def _detect_008(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_009(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-009: S3 replication configured to external account."""
     import re
+
     results = []
     for e in events:
         if e.event_name != "PutBucketReplication" or e.is_error:
@@ -306,6 +314,7 @@ def _detect_013(events: list[ParsedEvent]) -> list[ParsedEvent]:
 def _detect_014(events: list[ParsedEvent]) -> list[ParsedEvent]:
     """CDET-014: S3 DeleteObject on a bucket/key matching CloudTrail log pattern."""
     import re
+
     _CT_PATTERN = re.compile(r"AWSLogs/[0-9]{12}/CloudTrail/")
     results = []
     for e in events:
@@ -391,6 +400,7 @@ def run_validation(
 
 # ── unit-test examples ────────────────────────────────────────────────────────
 
+
 def _example_tests() -> None:
     from scripts.cloudtrail_parser import CloudTrailParser
 
@@ -406,8 +416,12 @@ def _example_tests() -> None:
         "awsRegion": "us-east-1",
         "sourceIPAddress": "198.51.100.77",
         "userAgent": "aws-cli",
-        "userIdentity": {"type": "IAMUser", "arn": "arn:aws:iam::123456789012:user/attacker",
-                         "accountId": "123456789012", "userName": "attacker"},
+        "userIdentity": {
+            "type": "IAMUser",
+            "arn": "arn:aws:iam::123456789012:user/attacker",
+            "accountId": "123456789012",
+            "userName": "attacker",
+        },
         "requestParameters": {"userName": "backdoor-user"},
     }
     e = parser.parse_dict(raw_001)
@@ -423,8 +437,12 @@ def _example_tests() -> None:
         "awsRegion": "us-east-1",
         "sourceIPAddress": "198.51.100.77",
         "userAgent": "aws-cli",
-        "userIdentity": {"type": "IAMUser", "arn": "arn:aws:iam::123456789012:user/attacker",
-                         "accountId": "123456789012", "userName": "attacker"},
+        "userIdentity": {
+            "type": "IAMUser",
+            "arn": "arn:aws:iam::123456789012:user/attacker",
+            "accountId": "123456789012",
+            "userName": "attacker",
+        },
         "requestParameters": {"name": "management-events-trail"},
     }
     e = parser.parse_dict(raw_003)
@@ -440,8 +458,7 @@ def _example_tests() -> None:
         "awsRegion": "us-east-1",
         "sourceIPAddress": "198.51.100.77",
         "userAgent": "aws-cli",
-        "userIdentity": {"type": "Root", "arn": "arn:aws:iam::123456789012:root",
-                         "accountId": "123456789012"},
+        "userIdentity": {"type": "Root", "arn": "arn:aws:iam::123456789012:root", "accountId": "123456789012"},
     }
     e = parser.parse_dict(raw_006)
     result = run_validation("CDET-006", [e], validators, should_fire=True)

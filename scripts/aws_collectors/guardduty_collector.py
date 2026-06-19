@@ -91,9 +91,7 @@ class GuardDutyCollector(BaseCollector):
             self._log.error("guardduty_list_detectors_failed", error=str(exc))
             return None
 
-    def _list_finding_ids(
-        self, client: object, detector_id: str
-    ) -> Iterator[str]:
+    def _list_finding_ids(self, client: object, detector_id: str) -> Iterator[str]:
         criteria = {
             "Criterion": {
                 "severity": {
@@ -106,21 +104,15 @@ class GuardDutyCollector(BaseCollector):
         }
         try:
             paginator = client.get_paginator("list_findings")
-            for page in paginator.paginate(
-                DetectorId=detector_id, FindingCriteria=criteria
-            ):
+            for page in paginator.paginate(DetectorId=detector_id, FindingCriteria=criteria):
                 yield from page.get("FindingIds", [])
         except ClientError as exc:
             self._log.error("guardduty_list_findings_failed", error=str(exc))
             raise
 
-    def _get_findings(
-        self, client: object, detector_id: str, finding_ids: list[str]
-    ) -> Iterator[GuardDutyFinding]:
+    def _get_findings(self, client: object, detector_id: str, finding_ids: list[str]) -> Iterator[GuardDutyFinding]:
         try:
-            response = client.get_findings(
-                DetectorId=detector_id, FindingIds=finding_ids
-            )
+            response = client.get_findings(DetectorId=detector_id, FindingIds=finding_ids)
             for raw in response.get("Findings", []):
                 finding = self._normalize(raw)
                 if finding is not None:
@@ -140,26 +132,17 @@ class GuardDutyCollector(BaseCollector):
             remote_country_code: str | None = None
 
             if action_type == "NETWORK_CONNECTION":
-                remote_ip = (
-                    action.get("NetworkConnectionAction", {})
-                    .get("RemoteIpDetails", {})
-                )
+                remote_ip = action.get("NetworkConnectionAction", {}).get("RemoteIpDetails", {})
                 remote_ip_address = remote_ip.get("IpAddressV4")
                 remote_country_code = remote_ip.get("Country", {}).get("CountryCode")
             elif action_type == "PORT_PROBE":
-                probe_details = (
-                    action.get("PortProbeAction", {})
-                    .get("PortProbeDetails", [{}])
-                )
+                probe_details = action.get("PortProbeAction", {}).get("PortProbeDetails", [{}])
                 if probe_details:
                     remote_ip = probe_details[0].get("RemoteIpDetails", {})
                     remote_ip_address = remote_ip.get("IpAddressV4")
                     remote_country_code = remote_ip.get("Country", {}).get("CountryCode")
 
-            ti_details = (
-                service.get("AdditionalInfo", {})
-                .get("ThreatListName", [])
-            )
+            ti_details = service.get("AdditionalInfo", {}).get("ThreatListName", [])
             if isinstance(ti_details, str):
                 ti_details = [ti_details]
 
@@ -167,13 +150,9 @@ class GuardDutyCollector(BaseCollector):
             resource_type = resource.get("ResourceType")
             resource_id: str | None = None
             if resource_type == "Instance":
-                resource_id = (
-                    resource.get("InstanceDetails", {}).get("InstanceId")
-                )
+                resource_id = resource.get("InstanceDetails", {}).get("InstanceId")
             elif resource_type == "AccessKey":
-                resource_id = (
-                    resource.get("AccessKeyDetails", {}).get("AccessKeyId")
-                )
+                resource_id = resource.get("AccessKeyDetails", {}).get("AccessKeyId")
             elif resource_type == "S3Bucket":
                 buckets = resource.get("S3BucketDetails", [])
                 resource_id = buckets[0].get("Name") if buckets else None

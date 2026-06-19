@@ -29,7 +29,6 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import sys
 import time
@@ -55,6 +54,7 @@ VALID_MODES = ["stop_logging", "degrade_trail", "stop_and_degrade", "delete_trai
 # ---------------------------------------------------------------------------
 # Core simulation functions
 # ---------------------------------------------------------------------------
+
 
 def get_trail_info(ct_client, trail_name: str) -> Optional[dict]:
     """Retrieve current trail configuration and status."""
@@ -183,11 +183,13 @@ def restore_trail(
         else:
             ct_client.put_event_selectors(
                 TrailName=trail_name,
-                EventSelectors=[{
-                    "ReadWriteType": "All",
-                    "IncludeManagementEvents": True,
-                    "DataResources": [],
-                }],
+                EventSelectors=[
+                    {
+                        "ReadWriteType": "All",
+                        "IncludeManagementEvents": True,
+                        "DataResources": [],
+                    }
+                ],
             )
         log.info("Event selectors restored")
     except ClientError as exc:
@@ -251,6 +253,7 @@ def delete_trail(ct_client, trail_name: str, dry_run: bool) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

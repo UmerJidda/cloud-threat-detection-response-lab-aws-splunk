@@ -63,17 +63,13 @@ def build_replication_config(
                     "Account": dest_account,
                     "AccessControlTranslation": {"Owner": "Destination"},
                 },
-                "DeleteMarkerReplication": {
-                    "Status": "Enabled" if include_delete_markers else "Disabled"
-                },
+                "DeleteMarkerReplication": {"Status": "Enabled" if include_delete_markers else "Disabled"},
             }
         ],
     }
 
 
-def check_existing_replication(
-    s3_client, bucket: str, source_account: str
-) -> None:
+def check_existing_replication(s3_client, bucket: str, source_account: str) -> None:
     """Check if the bucket already has replication configured and report findings."""
     log.info("Checking existing replication configuration on: %s", bucket)
     try:
@@ -94,7 +90,10 @@ def check_existing_replication(
 
             log.warning(
                 "  Rule %d: Status=%s | Dest bucket=%s | Dest account=%s",
-                i + 1, status, dest_bucket_arn, dest_account_id,
+                i + 1,
+                status,
+                dest_bucket_arn,
+                dest_account_id,
             )
 
             if dest_account_id != source_account and dest_account_id != "same-account":
@@ -124,7 +123,8 @@ def check_bucket_versioning(s3_client, bucket: str) -> bool:
         else:
             log.warning(
                 "Versioning status on %s: %s — replication requires Enabled",
-                bucket, status,
+                bucket,
+                status,
             )
             return False
     except ClientError as e:
@@ -157,9 +157,9 @@ def dry_run(
     print()
     print("AWS CLI equivalent command:")
     print()
-    print(f"  aws s3api put-bucket-replication \\")
+    print("  aws s3api put-bucket-replication \\")
     print(f"    --bucket {source_bucket} \\")
-    print(f"    --replication-configuration '<CONFIG_JSON>'")
+    print("    --replication-configuration '<CONFIG_JSON>'")
     print()
     print("Replication configuration JSON that WOULD be applied:")
     print()
@@ -232,15 +232,12 @@ def execute_replication(
         )
         log.info(
             "SUCCESS: PutBucketReplication configured on %s -> %s (account %s)",
-            source_bucket, dest_bucket, dest_account,
+            source_bucket,
+            dest_bucket,
+            dest_account,
         )
-        log.info(
-            "CloudTrail event generated: PutBucketReplication on %s", source_bucket
-        )
-        log.info(
-            "CDET-009 detection should fire within 5-15 minutes "
-            "(dependent on CloudTrail delivery delay)"
-        )
+        log.info("CloudTrail event generated: PutBucketReplication on %s", source_bucket)
+        log.info("CDET-009 detection should fire within 5-15 minutes (dependent on CloudTrail delivery delay)")
         print()
         print("Replication is now active. To remove it:")
         print(f"  aws s3api delete-bucket-replication --bucket {source_bucket}")
@@ -357,9 +354,7 @@ def main() -> None:
             source_account=source_account,
         )
     else:
-        role_arn = args.replication_role_arn or (
-            f"arn:aws:iam::{source_account}:role/cdet009-replication-role"
-        )
+        role_arn = args.replication_role_arn or (f"arn:aws:iam::{source_account}:role/cdet009-replication-role")
         dry_run(
             source_bucket=args.source_bucket,
             dest_account=args.dest_account,

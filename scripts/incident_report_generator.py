@@ -22,8 +22,7 @@ Usage:
 from __future__ import annotations
 
 import json
-import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -61,6 +60,7 @@ _TACTIC_BUSINESS_IMPACT: dict[str, str] = {
 
 
 # ── report data structures ────────────────────────────────────────────────────
+
 
 @dataclass
 class TimelineEntry:
@@ -119,6 +119,7 @@ class IncidentReport:
 
 # ── generator ─────────────────────────────────────────────────────────────────
 
+
 class IncidentReportGenerator:
     """
     Generate executive, analyst, and machine-readable incident reports.
@@ -154,10 +155,7 @@ class IncidentReportGenerator:
             ioc_report = self._ioc_extractor.extract_from_alert(original)
 
         actor_arn = (
-            original.get("creator_arn")
-            or original.get("actor_arn")
-            or original.get("session_issuer_arn")
-            or "unknown"
+            original.get("creator_arn") or original.get("actor_arn") or original.get("session_issuer_arn") or "unknown"
         )
         source_ip = original.get("event_source_ip") or original.get("sourceIPAddress") or "unknown"
         region = original.get("region") or original.get("awsRegion") or "unknown"
@@ -222,13 +220,13 @@ class IncidentReportGenerator:
         impact = _SEVERITY_IMPACT.get(r.severity.lower(), "Review recommended.")
         tactic_impact = _TACTIC_BUSINESS_IMPACT.get(r.tactic, "Potential security impact.")
         mfa_status = (
-            "MFA was NOT active" if r.principal_mfa_active is False
-            else "MFA status unknown" if r.principal_mfa_active is None
+            "MFA was NOT active"
+            if r.principal_mfa_active is False
+            else "MFA status unknown"
+            if r.principal_mfa_active is None
             else "MFA was active"
         )
-        escalation_note = (
-            f"\n> **Escalation reason:** {r.escalation_reason}\n" if r.escalation_reason else ""
-        )
+        escalation_note = f"\n> **Escalation reason:** {r.escalation_reason}\n" if r.escalation_reason else ""
 
         return f"""# Executive Incident Summary
 
@@ -293,11 +291,7 @@ class IncidentReportGenerator:
             if r.principal_attached_policies
             else "  - None retrieved (IAM enrichment not available or no policies attached)"
         )
-        errors_section = (
-            "\n".join(f"  - {e}" for e in r.enrichment_errors)
-            if r.enrichment_errors
-            else "  - None"
-        )
+        errors_section = "\n".join(f"  - {e}" for e in r.enrichment_errors) if r.enrichment_errors else "  - None"
 
         return f"""# Analyst Incident Report
 
@@ -305,7 +299,7 @@ class IncidentReportGenerator:
 **Detection:** {r.detection_id}
 **Generated:** {r.generated_at}
 **Severity:** {r.severity.upper()}
-**ATT&CK:** [{r.technique} — {r.technique_name}](https://attack.mitre.org/techniques/{r.technique.replace('.','/')}/})
+**ATT&CK:** [{r.technique} — {r.technique_name}](https://attack.mitre.org/techniques/{r.technique.replace(".", "/")})
 
 ---
 
@@ -480,15 +474,17 @@ See `playbooks/{r.detection_id}_*/` for:
         sorted_events = sorted(events, key=lambda e: e.event_time)
         entries = []
         for e in sorted_events:
-            entries.append(TimelineEntry(
-                timestamp=e.event_time.isoformat(),
-                event_id=e.event_id,
-                event_name=e.event_name,
-                actor=e.actor_label,
-                region=e.aws_region,
-                source_ip=e.source_ip_address,
-                description=self._event_description(e),
-            ))
+            entries.append(
+                TimelineEntry(
+                    timestamp=e.event_time.isoformat(),
+                    event_id=e.event_id,
+                    event_name=e.event_name,
+                    actor=e.actor_label,
+                    region=e.aws_region,
+                    source_ip=e.source_ip_address,
+                    description=self._event_description(e),
+                )
+            )
         return entries
 
     @staticmethod
@@ -512,8 +508,7 @@ See `playbooks/{r.detection_id}_*/` for:
 
     @staticmethod
     def _infer_affected_resource(original: dict[str, Any]) -> str:
-        for key in ("new_user_name", "target_user", "role_arn", "bucket_name",
-                    "instance_id", "trail_arn", "policyArn"):
+        for key in ("new_user_name", "target_user", "role_arn", "bucket_name", "instance_id", "trail_arn", "policyArn"):
             val = original.get(key)
             if val:
                 return str(val)
@@ -521,6 +516,7 @@ See `playbooks/{r.detection_id}_*/` for:
 
 
 # ── unit-test examples ────────────────────────────────────────────────────────
+
 
 def _example_tests() -> None:
     from scripts.alert_enrichment import AlertEnricher

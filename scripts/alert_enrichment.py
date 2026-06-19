@@ -25,7 +25,6 @@ Usage:
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -38,72 +37,106 @@ logger = structlog.get_logger(__name__)
 
 # ATT&CK context for all 14 CDETs — no external API call required
 _ATTACK_CONTEXT: dict[str, dict[str, str]] = {
-    "CDET-001": {"tactic": "Persistence", "technique": "T1136.003",
-                 "technique_name": "Create Account: Cloud Account",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1136/003/"},
-    "CDET-002": {"tactic": "Persistence", "technique": "T1098.001",
-                 "technique_name": "Account Manipulation: Additional Cloud Credentials",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1098/001/"},
-    "CDET-003": {"tactic": "Defense Evasion", "technique": "T1562.008",
-                 "technique_name": "Impair Defenses: Disable Cloud Logs",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1562/008/"},
-    "CDET-004": {"tactic": "Privilege Escalation", "technique": "T1078.004",
-                 "technique_name": "Valid Accounts: Cloud Accounts",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1078/004/"},
-    "CDET-005": {"tactic": "Privilege Escalation", "technique": "T1484.002",
-                 "technique_name": "Domain Policy Modification: Trust Modification",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1484/002/"},
-    "CDET-006": {"tactic": "Initial Access", "technique": "T1078.004",
-                 "technique_name": "Valid Accounts: Cloud Accounts",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1078/004/"},
-    "CDET-007": {"tactic": "Credential Access", "technique": "T1552.005",
-                 "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1552/005/"},
-    "CDET-008": {"tactic": "Discovery", "technique": "T1580",
-                 "technique_name": "Cloud Infrastructure Discovery",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1580/"},
-    "CDET-009": {"tactic": "Exfiltration", "technique": "T1537",
-                 "technique_name": "Transfer Data to Cloud Account",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1537/"},
-    "CDET-010": {"tactic": "Impact", "technique": "T1485",
-                 "technique_name": "Data Destruction",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1485/"},
-    "CDET-011": {"tactic": "Impact", "technique": "T1496",
-                 "technique_name": "Resource Hijacking",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1496/"},
-    "CDET-012": {"tactic": "Lateral Movement", "technique": "T1550.001",
-                 "technique_name": "Use Alternate Authentication Material",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1550/001/"},
-    "CDET-013": {"tactic": "Defense Evasion", "technique": "T1562.007",
-                 "technique_name": "Impair Defenses: Disable or Modify Cloud Firewall",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1562/007/"},
-    "CDET-014": {"tactic": "Defense Evasion", "technique": "T1070.004",
-                 "technique_name": "Indicator Removal: File Deletion",
-                 "tactic_url": "https://attack.mitre.org/techniques/T1070/004/"},
+    "CDET-001": {
+        "tactic": "Persistence",
+        "technique": "T1136.003",
+        "technique_name": "Create Account: Cloud Account",
+        "tactic_url": "https://attack.mitre.org/techniques/T1136/003/",
+    },
+    "CDET-002": {
+        "tactic": "Persistence",
+        "technique": "T1098.001",
+        "technique_name": "Account Manipulation: Additional Cloud Credentials",
+        "tactic_url": "https://attack.mitre.org/techniques/T1098/001/",
+    },
+    "CDET-003": {
+        "tactic": "Defense Evasion",
+        "technique": "T1562.008",
+        "technique_name": "Impair Defenses: Disable Cloud Logs",
+        "tactic_url": "https://attack.mitre.org/techniques/T1562/008/",
+    },
+    "CDET-004": {
+        "tactic": "Privilege Escalation",
+        "technique": "T1078.004",
+        "technique_name": "Valid Accounts: Cloud Accounts",
+        "tactic_url": "https://attack.mitre.org/techniques/T1078/004/",
+    },
+    "CDET-005": {
+        "tactic": "Privilege Escalation",
+        "technique": "T1484.002",
+        "technique_name": "Domain Policy Modification: Trust Modification",
+        "tactic_url": "https://attack.mitre.org/techniques/T1484/002/",
+    },
+    "CDET-006": {
+        "tactic": "Initial Access",
+        "technique": "T1078.004",
+        "technique_name": "Valid Accounts: Cloud Accounts",
+        "tactic_url": "https://attack.mitre.org/techniques/T1078/004/",
+    },
+    "CDET-007": {
+        "tactic": "Credential Access",
+        "technique": "T1552.005",
+        "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
+        "tactic_url": "https://attack.mitre.org/techniques/T1552/005/",
+    },
+    "CDET-008": {
+        "tactic": "Discovery",
+        "technique": "T1580",
+        "technique_name": "Cloud Infrastructure Discovery",
+        "tactic_url": "https://attack.mitre.org/techniques/T1580/",
+    },
+    "CDET-009": {
+        "tactic": "Exfiltration",
+        "technique": "T1537",
+        "technique_name": "Transfer Data to Cloud Account",
+        "tactic_url": "https://attack.mitre.org/techniques/T1537/",
+    },
+    "CDET-010": {
+        "tactic": "Impact",
+        "technique": "T1485",
+        "technique_name": "Data Destruction",
+        "tactic_url": "https://attack.mitre.org/techniques/T1485/",
+    },
+    "CDET-011": {
+        "tactic": "Impact",
+        "technique": "T1496",
+        "technique_name": "Resource Hijacking",
+        "tactic_url": "https://attack.mitre.org/techniques/T1496/",
+    },
+    "CDET-012": {
+        "tactic": "Lateral Movement",
+        "technique": "T1550.001",
+        "technique_name": "Use Alternate Authentication Material",
+        "tactic_url": "https://attack.mitre.org/techniques/T1550/001/",
+    },
+    "CDET-013": {
+        "tactic": "Defense Evasion",
+        "technique": "T1562.007",
+        "technique_name": "Impair Defenses: Disable or Modify Cloud Firewall",
+        "tactic_url": "https://attack.mitre.org/techniques/T1562/007/",
+    },
+    "CDET-014": {
+        "tactic": "Defense Evasion",
+        "technique": "T1070.004",
+        "technique_name": "Indicator Removal: File Deletion",
+        "tactic_url": "https://attack.mitre.org/techniques/T1070/004/",
+    },
 }
 
 _SEVERITY_ESCALATION: dict[str, dict[str, Any]] = {
-    "CDET-001": {"base": "high", "escalate_if": ["no_mfa", "admin_policy_attached"],
-                 "escalated": "critical"},
-    "CDET-002": {"base": "high", "escalate_if": ["second_key_created"],
-                 "escalated": "critical"},
+    "CDET-001": {"base": "high", "escalate_if": ["no_mfa", "admin_policy_attached"], "escalated": "critical"},
+    "CDET-002": {"base": "high", "escalate_if": ["second_key_created"], "escalated": "critical"},
     "CDET-003": {"base": "critical", "escalate_if": [], "escalated": "critical"},
     "CDET-004": {"base": "critical", "escalate_if": [], "escalated": "critical"},
-    "CDET-005": {"base": "high", "escalate_if": ["external_account"],
-                 "escalated": "critical"},
+    "CDET-005": {"base": "high", "escalate_if": ["external_account"], "escalated": "critical"},
     "CDET-006": {"base": "critical", "escalate_if": [], "escalated": "critical"},
     "CDET-007": {"base": "high", "escalate_if": ["external_ip"], "escalated": "critical"},
-    "CDET-008": {"base": "medium", "escalate_if": ["rapid_enumeration"],
-                 "escalated": "high"},
-    "CDET-009": {"base": "high", "escalate_if": ["unapproved_account"],
-                 "escalated": "critical"},
+    "CDET-008": {"base": "medium", "escalate_if": ["rapid_enumeration"], "escalated": "high"},
+    "CDET-009": {"base": "high", "escalate_if": ["unapproved_account"], "escalated": "critical"},
     "CDET-010": {"base": "critical", "escalate_if": [], "escalated": "critical"},
-    "CDET-011": {"base": "high", "escalate_if": ["unapproved_region", "gpu_instance"],
-                 "escalated": "critical"},
-    "CDET-012": {"base": "high", "escalate_if": ["three_hop_chain"],
-                 "escalated": "critical"},
-    "CDET-013": {"base": "high", "escalate_if": ["port_22_or_3389"],
-                 "escalated": "critical"},
+    "CDET-011": {"base": "high", "escalate_if": ["unapproved_region", "gpu_instance"], "escalated": "critical"},
+    "CDET-012": {"base": "high", "escalate_if": ["three_hop_chain"], "escalated": "critical"},
+    "CDET-013": {"base": "high", "escalate_if": ["port_22_or_3389"], "escalated": "critical"},
     "CDET-014": {"base": "critical", "escalate_if": [], "escalated": "critical"},
 }
 
@@ -210,9 +243,7 @@ class AlertEnricher:
             enriched.enriched_severity = cfg["escalated"]
             enriched.severity_escalation_reason = "MFA not used by actor"
 
-    def _apply_lookup_context(
-        self, alert: dict[str, Any], enriched: EnrichedAlert
-    ) -> None:
+    def _apply_lookup_context(self, alert: dict[str, Any], enriched: EnrichedAlert) -> None:
         arn = alert.get("creator_arn") or alert.get("actor_arn") or ""
         enriched.principal_in_approved_list = arn in self._approved_principals
         enriched.principal_in_automation_roles = arn in self._automation_roles
@@ -232,7 +263,11 @@ class AlertEnricher:
             resp = iam.get_user(UserName=username)
             user = resp["User"]
             enriched.principal_exists = True
-            enriched.principal_create_date = user.get("CreateDate", "").isoformat() if hasattr(user.get("CreateDate"), "isoformat") else str(user.get("CreateDate", ""))
+            enriched.principal_create_date = (
+                user.get("CreateDate", "").isoformat()
+                if hasattr(user.get("CreateDate"), "isoformat")
+                else str(user.get("CreateDate", ""))
+            )
             enriched.principal_console_access = self._has_console_access(iam, username, enriched)
 
             keys_resp = iam.list_access_keys(UserName=username)
@@ -242,9 +277,7 @@ class AlertEnricher:
             enriched.principal_mfa_active = len(mfa_resp.get("MFADevices", [])) > 0
 
             policies_resp = iam.list_attached_user_policies(UserName=username)
-            enriched.principal_attached_policies = [
-                p["PolicyArn"] for p in policies_resp.get("AttachedPolicies", [])
-            ]
+            enriched.principal_attached_policies = [p["PolicyArn"] for p in policies_resp.get("AttachedPolicies", [])]
 
             log.info("iam_context_enriched", username=username)
 
@@ -271,9 +304,7 @@ class AlertEnricher:
         ]
         if detection_id in ("CDET-001", "CDET-002", "CDET-004"):
             user = alert.get("new_user_name") or alert.get("target_user") or "TARGET_USER"
-            queries.append(
-                f'index=aws_cloudtrail "requestParameters.userName"="{user}" earliest=-30d'
-            )
+            queries.append(f'index=aws_cloudtrail "requestParameters.userName"="{user}" earliest=-30d')
         enriched.recommended_queries = queries
 
     # ── helpers ────────────────────────────────────────────────────────────────
@@ -319,6 +350,7 @@ class AlertEnricher:
 
 
 # ── unit-test examples ────────────────────────────────────────────────────────
+
 
 def _example_tests() -> None:
     """Illustrative assertions — run with pytest or directly (no AWS calls made)."""

@@ -1,0 +1,298 @@
+<dashboard version="1.1" theme="dark">
+  <label>SOC Operations — Cloud Threat Detection Lab</label>
+  <description>Real-time SOC operations view providing alert queue management, active incident monitoring, and detection health status for the Cloud Threat Detection Lab.</description>
+  <refresh>300</refresh>
+
+  <!-- ============================================================
+       ROW 1: Alert Queue + Severity Counts
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Alert Queue (Last 24h)</title>
+      <table>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h
+            | table _time detection_id enriched_severity actor_arn aws_region disposition
+            | sort -_time
+            | rename _time AS "Time"
+                     detection_id AS "Detection ID"
+                     enriched_severity AS "Severity"
+                     actor_arn AS "Actor ARN"
+                     aws_region AS "Region"
+                     disposition AS "Disposition"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">true</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <condition field="Detection ID">
+            <set token="selected_detection_id">$row.Detection ID$</set>
+            <set token="selected_actor">$row.Actor ARN$</set>
+            <link target="_blank">/app/search/search?q=index%3Dcdet_alerts%20detection_id%3D"$row.Detection ID$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 2: Active Alerts by Severity (Single Values)
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Critical Alerts (24h)</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h enriched_severity=critical
+            | stats count
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1,5]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">alerts</option>
+        <option name="underLabel">CRITICAL</option>
+      </single>
+    </panel>
+    <panel>
+      <title>High Alerts (24h)</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h enriched_severity=high
+            | stats count
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,3,10]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">alerts</option>
+        <option name="underLabel">HIGH</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Medium Alerts (24h)</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h enriched_severity=medium
+            | stats count
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,10,25]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">alerts</option>
+        <option name="underLabel">MEDIUM</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Low Alerts (24h)</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h enriched_severity=low
+            | stats count
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,20,50]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">alerts</option>
+        <option name="underLabel">LOW</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 3: Detection Firing Rate + False Positive Rate
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Detection Firing Rate (Last 7 Days)</title>
+      <chart>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-7d
+            | timechart span=1d count by detection_id
+          </query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Date</option>
+        <option name="charting.axisTitleY.text">Alert Count</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>False Positive Rate (Last 7 Days)</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-7d
+            | eval is_fp=if(disposition="false_positive",1,0)
+            | stats sum(is_fp) AS fp_count, count AS total_alerts
+            | eval fp_rate=round((fp_count / total_alerts) * 100, 1)
+            | eval fp_rate=if(isnull(fp_rate), 0, fp_rate)
+            | fields fp_rate
+          </query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[5,15]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">1</option>
+        <option name="unit">%</option>
+        <option name="underLabel">FALSE POSITIVE RATE</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 4: Top Actors + Alerts by Region
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Top Actors by Alert Count (Last 24h)</title>
+      <chart>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h
+            | stats count by actor_arn
+            | sort -count
+            | head 10
+            | rename actor_arn AS "Actor ARN", count AS "Alert Count"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.orientation">horizontal</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.text">Alert Count</option>
+        <option name="charting.axisTitleY.text">Actor ARN</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Alerts by AWS Region (Last 24h)</title>
+      <table>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h
+            | stats count by aws_region
+            | sort -count
+            | rename aws_region AS "AWS Region", count AS "Alert Count"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <condition field="AWS Region">
+            <link target="_blank">/app/search/search?q=index%3Dcdet_alerts%20aws_region%3D"$click.value$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 5: Detection Health Status + Data Source Ingestion
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Detection Health Status</title>
+      <table>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-24h
+            | stats count AS alert_count by detection_id
+            | eval health=case(
+                alert_count=0,    "NO_ALERTS",
+                alert_count &lt;= 10, "NORMAL",
+                alert_count &lt;= 50, "ELEVATED",
+                true(),           "HIGH_VOLUME"
+              )
+            | appendcols
+                [| rest /servicesNS/nobody/search/saved/searches
+                 | search title="CDET-*"
+                 | table title
+                 | rename title AS detection_id
+                 | eval alert_count=0, health="NO_ALERTS"]
+            | dedup detection_id
+            | sort detection_id
+            | rename detection_id AS "Detection ID"
+                     alert_count AS "24h Alerts"
+                     health AS "Health Status"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Health Status">
+          <colorPalette type="map">{"NO_ALERTS": "#dc4e41", "NORMAL": "#53a051", "ELEVATED": "#f8be34", "HIGH_VOLUME": "#f1813f"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Detection ID">
+            <link target="_blank">/app/search/search?q=index%3Dcdet_alerts%20detection_id%3D"$row.Detection ID$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>CloudTrail Ingestion Rate (Last 1h)</title>
+      <single>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-1h
+            | stats count
+          </query>
+          <earliest>-1h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[10,100]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">events</option>
+        <option name="underLabel">CLOUDTRAIL EVENTS / HOUR</option>
+      </single>
+    </panel>
+  </row>
+
+</dashboard>

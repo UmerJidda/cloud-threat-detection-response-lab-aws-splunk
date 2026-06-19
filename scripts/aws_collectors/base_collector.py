@@ -8,7 +8,6 @@ contract that every concrete collector must follow.
 from __future__ import annotations
 
 import json
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -129,8 +128,7 @@ class BaseCollector(ABC):
     def _write_output(self, result: CollectorResult, output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         filename = (
-            f"{self.collector_name}_{result.aws_account_id}"
-            f"_{result.collected_at.strftime('%Y%m%dT%H%M%SZ')}.ndjson"
+            f"{self.collector_name}_{result.aws_account_id}_{result.collected_at.strftime('%Y%m%dT%H%M%SZ')}.ndjson"
         )
         out_path = output_dir / filename
         with out_path.open("w", encoding="utf-8") as fh:

@@ -59,6 +59,7 @@ PRIVILEGED_POLICY_KEYWORDS = ["AdministratorAccess", "FullAccess", "PowerUser", 
 # Reconnaissance helpers
 # ---------------------------------------------------------------------------
 
+
 def list_high_value_targets(iam_client) -> list[dict]:
     """
     Enumerate IAM users and identify high-value targets based on attached policies.
@@ -85,13 +86,15 @@ def list_high_value_targets(iam_client) -> list[dict]:
                 keys = iam_client.list_access_keys(UserName=username)
                 key_count = len(keys.get("AccessKeyMetadata", []))
 
-                targets.append({
-                    "username": username,
-                    "privileged_policies": privileged_policies,
-                    "key_count": key_count,
-                    "is_high_value": len(privileged_policies) > 0,
-                    "can_add_key": key_count < 2,
-                })
+                targets.append(
+                    {
+                        "username": username,
+                        "privileged_policies": privileged_policies,
+                        "key_count": key_count,
+                        "is_high_value": len(privileged_policies) > 0,
+                        "can_add_key": key_count < 2,
+                    }
+                )
     except ClientError as exc:
         log.error("Failed to enumerate users: %s", exc)
 
@@ -120,6 +123,7 @@ def print_targets(targets: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 # Core simulation
 # ---------------------------------------------------------------------------
+
 
 def create_backdoor_key(
     iam_client,
@@ -206,6 +210,7 @@ def cleanup_key(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

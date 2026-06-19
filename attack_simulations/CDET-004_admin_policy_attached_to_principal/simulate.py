@@ -32,7 +32,6 @@ import json
 import logging
 import sys
 import time
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -68,6 +67,7 @@ WILDCARD_POLICY_DOCUMENT = {
 # Managed policy variant
 # ---------------------------------------------------------------------------
 
+
 def attach_managed_admin_policy(
     iam_client,
     target_user: str,
@@ -80,7 +80,9 @@ def attach_managed_admin_policy(
     CloudTrail event: AttachUserPolicy
     """
     if dry_run:
-        log.info("[DRY-RUN] Would call: iam.attach_user_policy(UserName='%s', PolicyArn='%s')", target_user, ADMIN_POLICY_ARN)
+        log.info(
+            "[DRY-RUN] Would call: iam.attach_user_policy(UserName='%s', PolicyArn='%s')", target_user, ADMIN_POLICY_ARN
+        )
         log.info("[DRY-RUN] CloudTrail event generated: AttachUserPolicy")
         return True
 
@@ -102,7 +104,9 @@ def detach_managed_admin_policy(
 ) -> None:
     """Detach AdministratorAccess managed policy from target user."""
     if dry_run:
-        log.info("[DRY-RUN] Would call: iam.detach_user_policy(UserName='%s', PolicyArn='%s')", target_user, ADMIN_POLICY_ARN)
+        log.info(
+            "[DRY-RUN] Would call: iam.detach_user_policy(UserName='%s', PolicyArn='%s')", target_user, ADMIN_POLICY_ARN
+        )
         return
 
     log.warning("EXECUTING: iam.detach_user_policy(UserName='%s', PolicyArn='%s')", target_user, ADMIN_POLICY_ARN)
@@ -117,6 +121,7 @@ def detach_managed_admin_policy(
 # ---------------------------------------------------------------------------
 # Inline policy variant
 # ---------------------------------------------------------------------------
+
 
 def attach_inline_admin_policy(
     iam_client,
@@ -193,6 +198,7 @@ def delete_inline_admin_policy(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -288,7 +294,9 @@ def main() -> int:
         success = attach_inline_admin_policy(iam, args.target_user, dry_run)
     else:
         log.info("Variant: AWS managed AdministratorAccess (AttachUserPolicy)")
-        log.info("CloudTrail event: AttachUserPolicy | requestParameters.policyArn=arn:aws:iam::aws:policy/AdministratorAccess")
+        log.info(
+            "CloudTrail event: AttachUserPolicy | requestParameters.policyArn=arn:aws:iam::aws:policy/AdministratorAccess"
+        )
         success = attach_managed_admin_policy(iam, args.target_user, dry_run)
 
     if not success:

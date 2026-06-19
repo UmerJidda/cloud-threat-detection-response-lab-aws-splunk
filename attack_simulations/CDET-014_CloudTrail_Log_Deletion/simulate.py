@@ -33,7 +33,7 @@ import json
 import logging
 import sys
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -78,11 +78,13 @@ def check_object_lock(s3_client, bucket: str) -> dict:
                 result["severity"] = "PASS"
                 result["pass"] = True
             elif mode == "GOVERNANCE":
-                result["finding"] = f"Object Lock GOVERNANCE mode — can be bypassed with s3:BypassGovernanceRetention"
+                result["finding"] = "Object Lock GOVERNANCE mode — can be bypassed with s3:BypassGovernanceRetention"
                 result["severity"] = "MEDIUM"
                 result["pass"] = False
             else:
-                result["finding"] = "Object Lock enabled but no default retention rule — individual objects may lack protection"
+                result["finding"] = (
+                    "Object Lock enabled but no default retention rule — individual objects may lack protection"
+                )
                 result["severity"] = "HIGH"
         # else: ObjectLockEnabled = Disabled or absent
 
@@ -166,13 +168,8 @@ def check_bucket_policy_for_delete_deny(s3_client, bucket: str) -> dict:
                 actions = [actions]
 
             # Check if any deny statement covers DeleteObject
-            delete_actions = [
-                "s3:DeleteObject", "s3:DeleteObjectVersion",
-                "s3:*", "s3:Delete*"
-            ]
-            has_deny = effect == "Deny" and any(
-                a in delete_actions for a in actions
-            )
+            delete_actions = ["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:*", "s3:Delete*"]
+            has_deny = effect == "Deny" and any(a in delete_actions for a in actions)
 
             if has_deny:
                 # Verify it's not conditioned in a way that allows bypass
@@ -226,22 +223,19 @@ def check_s3_data_events(ct_client, trail_arn: str) -> dict:
                         # Covers all S3
                         result["covers_all_s3"] = True
                         rw_type = selector.get("ReadWriteType", "All")
-                        result["finding"] = (
-                            f"S3 data events enabled for all buckets (ReadWriteType: {rw_type})"
-                        )
+                        result["finding"] = f"S3 data events enabled for all buckets (ReadWriteType: {rw_type})"
                         result["severity"] = "PASS"
                         result["pass"] = True
                     else:
-                        result["finding"] = (
-                            f"S3 data events enabled but only for specific buckets: {values}"
-                        )
+                        result["finding"] = f"S3 data events enabled but only for specific buckets: {values}"
                         result["severity"] = "MEDIUM"
 
         # Check advanced event selectors
         for adv_selector in resp.get("AdvancedEventSelectors", []):
             for field_selector in adv_selector.get("FieldSelectors", []):
-                if (field_selector.get("Field") == "resources.type" and
-                        "AWS::S3::Object" in field_selector.get("Equals", [])):
+                if field_selector.get("Field") == "resources.type" and "AWS::S3::Object" in field_selector.get(
+                    "Equals", []
+                ):
                     result["data_events_enabled"] = True
                     result["covers_all_s3"] = True
                     result["finding"] = "S3 data events enabled (advanced event selectors)"
@@ -258,9 +252,6 @@ def check_s3_data_events(ct_client, trail_arn: str) -> dict:
 
 def check_cross_account_delivery(ct_client, trail: dict, account_id: str) -> dict:
     """Check if logs are delivered to a different account (resilient architecture)."""
-    bucket = trail.get("S3BucketName", "")
-    trail_account = trail.get("HomeRegion", "").split(":")[4] if ":" in trail.get("HomeRegion", "") else account_id
-
     # Extract bucket owner account from the trail's S3BucketName context
     # We can infer cross-account if trail is from an org-level trail
     is_org_trail = trail.get("IsOrganizationTrail", False)
@@ -330,8 +321,9 @@ def assess_trail(
         assessment["overall_risk"] = "LOW"
         assessment["vulnerable_to_deletion"] = False
         assessment["summary"] = "PROTECTED: S3 Object Lock Compliance mode prevents all deletion"
-    elif (controls["object_lock"].get("pass") or
-          (controls["versioning"].get("pass") and controls["bucket_policy_deny"].get("pass"))):
+    elif controls["object_lock"].get("pass") or (
+        controls["versioning"].get("pass") and controls["bucket_policy_deny"].get("pass")
+    ):
         assessment["overall_risk"] = "MEDIUM"
         assessment["vulnerable_to_deletion"] = False
         assessment["summary"] = "PARTIALLY PROTECTED: Some deletion controls present, but not fully hardened"
@@ -467,8 +459,7 @@ to CDET-014 (CloudTrail log deletion) and identifies specific control gaps.
     # Overall summary
     vulnerable_trails = [a for a in all_assessments if a.get("vulnerable_to_deletion")]
     s3_data_events_missing = [
-        a for a in all_assessments
-        if not a.get("controls", {}).get("s3_data_events", {}).get("pass", False)
+        a for a in all_assessments if not a.get("controls", {}).get("s3_data_events", {}).get("pass", False)
     ]
 
     print()

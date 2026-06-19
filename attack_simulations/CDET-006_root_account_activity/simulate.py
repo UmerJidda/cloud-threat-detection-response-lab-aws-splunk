@@ -34,7 +34,6 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -54,6 +53,7 @@ log = logging.getLogger("cdet006-sim")
 # ---------------------------------------------------------------------------
 # Identity check
 # ---------------------------------------------------------------------------
+
 
 def check_identity(sts_client) -> dict:
     """
@@ -88,6 +88,7 @@ def check_identity(sts_client) -> dict:
 # CloudTrail coverage verification
 # ---------------------------------------------------------------------------
 
+
 def verify_cloudtrail_coverage(ct_client, logs_client) -> dict:
     """Check CloudTrail configuration for root detection coverage."""
     results = {
@@ -118,13 +119,15 @@ def verify_cloudtrail_coverage(ct_client, logs_client) -> dict:
             except ClientError:
                 is_logging = False
 
-            log.info("Trail: %s | Logging: %s | MultiRegion: %s | GlobalEvents: %s | CWLogs: %s | Validation: %s",
-                     trail_name,
-                     is_logging,
-                     trail.get("IsMultiRegionTrail", False),
-                     trail.get("IncludeGlobalServiceEvents", False),
-                     bool(trail.get("CloudWatchLogsLogGroupArn")),
-                     trail.get("LogFileValidationEnabled", False))
+            log.info(
+                "Trail: %s | Logging: %s | MultiRegion: %s | GlobalEvents: %s | CWLogs: %s | Validation: %s",
+                trail_name,
+                is_logging,
+                trail.get("IsMultiRegionTrail", False),
+                trail.get("IncludeGlobalServiceEvents", False),
+                bool(trail.get("CloudWatchLogsLogGroupArn")),
+                trail.get("LogFileValidationEnabled", False),
+            )
 
             if is_logging:
                 results["has_active_trail"] = True
@@ -133,16 +136,14 @@ def verify_cloudtrail_coverage(ct_client, logs_client) -> dict:
                 results["has_global_service_events"] = True
             else:
                 results["issues"].append(
-                    f"Trail '{trail_name}': IncludeGlobalServiceEvents=False — "
-                    "root IAM API calls may not be logged"
+                    f"Trail '{trail_name}': IncludeGlobalServiceEvents=False — root IAM API calls may not be logged"
                 )
 
             if trail.get("IsMultiRegionTrail", False):
                 results["has_multi_region_trail"] = True
             else:
                 results["issues"].append(
-                    f"Trail '{trail_name}': Single-region only — "
-                    "root activity in other regions won't be captured"
+                    f"Trail '{trail_name}': Single-region only — root activity in other regions won't be captured"
                 )
 
             if trail.get("CloudWatchLogsLogGroupArn"):
@@ -176,9 +177,7 @@ def verify_cloudwatch_alarms(cw_client) -> dict:
         all_alarms = alarms.get("MetricAlarms", [])
 
         root_alarms = [
-            a for a in all_alarms
-            if "root" in a["AlarmName"].lower() or
-               "Root" in a.get("AlarmDescription", "")
+            a for a in all_alarms if "root" in a["AlarmName"].lower() or "Root" in a.get("AlarmDescription", "")
         ]
 
         if root_alarms:
@@ -201,6 +200,7 @@ def verify_cloudwatch_alarms(cw_client) -> dict:
 # Recent root activity check
 # ---------------------------------------------------------------------------
 
+
 def check_recent_root_activity(ct_client, lookback_hours: int = 72) -> list[dict]:
     """Look up recent CloudTrail events from the root account."""
     log.info("Checking for root account activity in the last %d hours...", lookback_hours)
@@ -211,21 +211,21 @@ def check_recent_root_activity(ct_client, lookback_hours: int = 72) -> list[dict
     try:
         paginator = ct_client.get_paginator("lookup_events")
         for page in paginator.paginate(
-            LookupAttributes=[
-                {"AttributeKey": "EventName", "AttributeValue": "ConsoleLogin"}
-            ],
+            LookupAttributes=[{"AttributeKey": "EventName", "AttributeValue": "ConsoleLogin"}],
             StartTime=start_time,
         ):
             for event in page.get("Events", []):
                 ct_event = json.loads(event.get("CloudTrailEvent", "{}"))
                 if ct_event.get("userIdentity", {}).get("type") == "Root":
-                    root_events.append({
-                        "time": event.get("EventTime"),
-                        "eventName": event.get("EventName"),
-                        "sourceIP": ct_event.get("sourceIPAddress"),
-                        "mfaUsed": ct_event.get("additionalEventData", {}).get("MFAUsed", "Unknown"),
-                        "loginResult": ct_event.get("responseElements", {}).get("ConsoleLogin", "Unknown"),
-                    })
+                    root_events.append(
+                        {
+                            "time": event.get("EventTime"),
+                            "eventName": event.get("EventName"),
+                            "sourceIP": ct_event.get("sourceIPAddress"),
+                            "mfaUsed": ct_event.get("additionalEventData", {}).get("MFAUsed", "Unknown"),
+                            "loginResult": ct_event.get("responseElements", {}).get("ConsoleLogin", "Unknown"),
+                        }
+                    )
     except ClientError as exc:
         log.error("Cannot look up CloudTrail events: %s", exc)
 
@@ -248,6 +248,7 @@ def check_recent_root_activity(ct_client, lookback_hours: int = 72) -> list[dict
 # ---------------------------------------------------------------------------
 # Assessment summary
 # ---------------------------------------------------------------------------
+
 
 def print_assessment_summary(
     ct_results: dict,
@@ -299,6 +300,7 @@ def print_assessment_summary(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -378,7 +380,7 @@ def main() -> int:
 
     # Full assessment (default)
     log.info("Running full root detection coverage assessment...")
-    identity = check_identity(sts)
+    check_identity(sts)
     ct_results = verify_cloudtrail_coverage(ct, None)
     cw_results = verify_cloudwatch_alarms(cw)
     recent_activity = check_recent_root_activity(ct, args.lookback_hours)

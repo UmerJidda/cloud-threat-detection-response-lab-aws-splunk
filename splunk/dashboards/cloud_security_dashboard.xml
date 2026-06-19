@@ -1,0 +1,222 @@
+<dashboard version="1.1" theme="dark">
+  <label>Cloud Security Posture — AWS Coverage</label>
+  <description>AWS cloud security posture dashboard providing visibility into CloudTrail events, IAM activity, external IP access, GuardDuty findings, and SecurityHub critical alerts.</description>
+  <refresh>600</refresh>
+
+  <!-- ============================================================
+       ROW 1: CloudTrail Events by Service + Top Event Types
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>CloudTrail Events by Service (Last 24h)</title>
+      <chart>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-24h
+            | stats count by eventSource
+            | sort -count
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Top Event Types (Last 24h)</title>
+      <table>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-24h
+            | stats count by eventName
+            | sort -count
+            | head 20
+            | rename eventName AS "Event Name", count AS "Count"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">true</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <condition field="Event Name">
+            <link target="_blank">/app/search/search?q=index%3Daws_cloudtrail%20eventName%3D"$click.value$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 2: Activity by Region + IAM High-Value Events
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Activity by AWS Region (Last 24h)</title>
+      <table>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-24h
+            | stats count by awsRegion
+            | sort -count
+            | rename awsRegion AS "AWS Region", count AS "Event Count"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <condition field="AWS Region">
+            <link target="_blank">/app/search/search?q=index%3Daws_cloudtrail%20awsRegion%3D"$click.value$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>IAM High-Value Events (Last 7 Days)</title>
+      <chart>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-7d
+              eventName IN (CreateUser, CreateAccessKey, AttachUserPolicy, UpdateAssumeRolePolicy,
+                            DeleteUser, DeleteAccessKey, DetachUserPolicy, PutUserPolicy,
+                            CreateRole, DeleteRole, AttachRolePolicy)
+            | timechart span=1h count by eventName
+          </query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Event Count</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 3: External IP Activity
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>External IP Activity — Top Source IPs (Last 24h)</title>
+      <table>
+        <search>
+          <query>
+            index=aws_cloudtrail earliest=-24h
+            | where NOT match(sourceIPAddress, "^10\.") AND
+                    NOT match(sourceIPAddress, "^172\.(1[6-9]|2[0-9]|3[0-1])\.") AND
+                    NOT match(sourceIPAddress, "^192\.168\.") AND
+                    NOT match(sourceIPAddress, "^127\.") AND
+                    sourceIPAddress!="AWS Internal" AND
+                    sourceIPAddress!=""
+            | stats count values(eventName) AS event_names by sourceIPAddress userAgent
+            | sort -count
+            | head 20
+            | eval event_names=mvjoin(event_names, ", ")
+            | rename sourceIPAddress AS "Source IP"
+                     count AS "Event Count"
+                     event_names AS "Event Types"
+                     userAgent AS "User Agent"
+          </query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <condition field="Source IP">
+            <link target="_blank">/app/search/search?q=index%3Daws_cloudtrail%20sourceIPAddress%3D"$click.value$"%20earliest%3D-24h&amp;earliest=-24h&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 4: GuardDuty Findings + SecurityHub Critical Findings
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>GuardDuty Findings by Type and Severity (Last 7 Days)</title>
+      <table>
+        <search>
+          <query>
+            index=aws_security sourcetype=aws:guardduty earliest=-7d
+            | stats count by type severity
+            | eval severity_label=case(
+                severity &gt;= 7.0, "HIGH",
+                severity &gt;= 4.0, "MEDIUM",
+                severity &gt;= 1.0, "LOW",
+                true(),            "INFORMATIONAL"
+              )
+            | sort -count
+            | rename type AS "Finding Type"
+                     severity AS "Severity Score"
+                     severity_label AS "Severity"
+                     count AS "Count"
+          </query>
+          <earliest>-7d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{"HIGH": "#dc4e41", "MEDIUM": "#f1813f", "LOW": "#f8be34", "INFORMATIONAL": "#53a051"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Finding Type">
+            <link target="_blank">/app/search/search?q=index%3Daws_security%20sourcetype%3Daws%3Aguardduty%20type%3D"$row.Finding Type$"%20earliest%3D-7d&amp;earliest=-7d&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>SecurityHub Critical Findings (Last 30 Days)</title>
+      <table>
+        <search>
+          <query>
+            index=aws_security sourcetype=aws:securityhub earliest=-30d
+              "Severity.Label"=CRITICAL
+            | table _time Title "Severity.Label" "ProductFields.aws/securityhub/FindingId" CreatedAt
+            | sort -_time
+            | rename _time AS "Detected"
+                     Title AS "Finding Title"
+                     "Severity.Label" AS "Severity"
+                     "ProductFields.aws/securityhub/FindingId" AS "Finding ID"
+                     CreatedAt AS "Created At"
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{"CRITICAL": "#dc4e41", "HIGH": "#f1813f", "MEDIUM": "#f8be34", "LOW": "#53a051"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Finding Title">
+            <link target="_blank">/app/search/search?q=index%3Daws_security%20sourcetype%3Daws%3Asecurityhub%20Title%3D"$row.Finding Title$"%20earliest%3D-30d&amp;earliest=-30d&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

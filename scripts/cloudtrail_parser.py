@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import gzip
 import json
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,7 +123,7 @@ class CloudTrailParser:
 
         # Try NDJSON first (most common in this repo)
         if text.startswith("{"):
-            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
             for lineno, line in enumerate(lines, 1):
                 try:
                     obj = json.loads(line)
@@ -222,6 +221,7 @@ def filter_events(
 
 
 # ── unit-test examples ────────────────────────────────────────────────────────
+
 
 def _example_tests() -> None:
     """Illustrative assertions — run with pytest or directly."""

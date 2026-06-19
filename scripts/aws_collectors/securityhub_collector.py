@@ -57,10 +57,7 @@ class SecurityHubCollector(BaseCollector):
                 {"Value": "NEW", "Comparison": "EQUALS"},
                 {"Value": "NOTIFIED", "Comparison": "EQUALS"},
             ],
-            "SeverityLabel": [
-                {"Value": label, "Comparison": "EQUALS"}
-                for label in self.severity_labels
-            ],
+            "SeverityLabel": [{"Value": label, "Comparison": "EQUALS"} for label in self.severity_labels],
         }
 
         self._log.info(

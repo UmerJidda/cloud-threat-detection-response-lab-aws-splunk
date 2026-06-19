@@ -56,6 +56,7 @@ SIMULATION_ROLE_NAME = "cdet005-simulation-target-role"
 # Helper: build trust policy documents
 # ---------------------------------------------------------------------------
 
+
 def build_initial_trust_policy(account_id: str) -> dict:
     """Build a minimal trust policy allowing current account's root."""
     return {
@@ -70,9 +71,7 @@ def build_initial_trust_policy(account_id: str) -> dict:
     }
 
 
-def build_modified_trust_policy(
-    original_policy: dict, external_account_id: str
-) -> dict:
+def build_modified_trust_policy(original_policy: dict, external_account_id: str) -> dict:
     """Add an external account principal to an existing trust policy."""
     modified = json.loads(json.dumps(original_policy))  # Deep copy
     external_statement = {
@@ -89,6 +88,7 @@ def build_modified_trust_policy(
 # Core simulation functions
 # ---------------------------------------------------------------------------
 
+
 def create_simulation_role(
     iam_client,
     account_id: str,
@@ -101,7 +101,9 @@ def create_simulation_role(
     trust_policy = build_initial_trust_policy(account_id)
 
     if dry_run:
-        log.info("[DRY-RUN] Would call: iam.create_role(RoleName='%s', AssumeRolePolicyDocument=...)", SIMULATION_ROLE_NAME)
+        log.info(
+            "[DRY-RUN] Would call: iam.create_role(RoleName='%s', AssumeRolePolicyDocument=...)", SIMULATION_ROLE_NAME
+        )
         log.info("[DRY-RUN] CloudTrail event: CreateRole")
         return SIMULATION_ROLE_NAME
 
@@ -172,8 +174,7 @@ def modify_trust_policy(
         role_name,
     )
     log.warning(
-        "Adding external account %s to trust policy — any principal in that account "
-        "can now assume role '%s'",
+        "Adding external account %s to trust policy — any principal in that account can now assume role '%s'",
         external_account_id,
         role_name,
     )
@@ -237,6 +238,7 @@ def delete_simulation_role(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -369,8 +371,7 @@ def main() -> int:
 
     log.info("Simulation complete.")
     log.info(
-        "Expected CDET-005 alert: index=aws_cloudtrail eventName=UpdateAssumeRolePolicy "
-        "requestParameters.roleName=%s",
+        "Expected CDET-005 alert: index=aws_cloudtrail eventName=UpdateAssumeRolePolicy requestParameters.roleName=%s",
         role_name,
     )
 

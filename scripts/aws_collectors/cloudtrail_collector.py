@@ -118,9 +118,7 @@ class CloudTrailCollector(BaseCollector):
                         yield event
 
                     if collected >= self.max_results:
-                        self._log.info(
-                            "cloudtrail_max_results_reached", max=self.max_results
-                        )
+                        self._log.info("cloudtrail_max_results_reached", max=self.max_results)
                         return
 
         except ClientError as exc:

@@ -78,9 +78,7 @@ class EnumerationResults:
         self.unique_apis.add(f"{service}:{api}")
 
     def add_risk(self, severity: str, resource: str, finding: str) -> None:
-        self.findings["risk_findings"].append(
-            {"severity": severity, "resource": resource, "finding": finding}
-        )
+        self.findings["risk_findings"].append({"severity": severity, "resource": resource, "finding": finding})
 
 
 def safe_call(results: EnumerationResults, service: str, api: str, func, **kwargs):
@@ -190,15 +188,14 @@ def enumerate_s3(session: boto3.Session, results: EnumerationResults) -> None:
 
         # Public access block
         resp_pab = safe_call(
-            results, "s3", "GetBucketPublicAccessBlock",
-            s3.get_bucket_public_access_block, Bucket=name
+            results, "s3", "GetBucketPublicAccessBlock", s3.get_bucket_public_access_block, Bucket=name
         )
         if resp_pab:
             pab = resp_pab.get("PublicAccessBlockConfiguration", {})
-            all_blocked = all(pab.get(k, False) for k in [
-                "BlockPublicAcls", "IgnorePublicAcls",
-                "BlockPublicPolicy", "RestrictPublicBuckets"
-            ])
+            all_blocked = all(
+                pab.get(k, False)
+                for k in ["BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"]
+            )
             bucket_info["public_access_blocked"] = all_blocked
             if not all_blocked:
                 log.warning("  [RISK] Bucket %s: Public access block NOT fully enabled", name)
@@ -207,10 +204,7 @@ def enumerate_s3(session: boto3.Session, results: EnumerationResults) -> None:
             log.warning("  [RISK] Bucket %s: Could not verify public access block", name)
 
         # Encryption
-        resp_enc = safe_call(
-            results, "s3", "GetBucketEncryption",
-            s3.get_bucket_encryption, Bucket=name
-        )
+        resp_enc = safe_call(results, "s3", "GetBucketEncryption", s3.get_bucket_encryption, Bucket=name)
         if resp_enc:
             rules = resp_enc.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
             bucket_info["encrypted"] = len(rules) > 0
@@ -220,10 +214,7 @@ def enumerate_s3(session: boto3.Session, results: EnumerationResults) -> None:
             results.add_risk("MEDIUM", f"s3:{name}", "Default encryption not configured")
 
         # Versioning
-        resp_ver = safe_call(
-            results, "s3", "GetBucketVersioning",
-            s3.get_bucket_versioning, Bucket=name
-        )
+        resp_ver = safe_call(results, "s3", "GetBucketVersioning", s3.get_bucket_versioning, Bucket=name)
         if resp_ver:
             status = resp_ver.get("Status", "Disabled")
             bucket_info["versioning"] = status
@@ -247,9 +238,7 @@ def enumerate_ec2(session: boto3.Session, results: EnumerationResults) -> None:
     # Instances
     resp = safe_call(results, "ec2", "DescribeInstances", ec2.describe_instances)
     if resp:
-        instance_count = sum(
-            len(r["Instances"]) for r in resp.get("Reservations", [])
-        )
+        instance_count = sum(len(r["Instances"]) for r in resp.get("Reservations", []))
         log.info("EC2 Instances: %d", instance_count)
         results.findings["ec2"]["instances"] = []
         for reservation in resp.get("Reservations", []):
@@ -258,9 +247,7 @@ def enumerate_ec2(session: boto3.Session, results: EnumerationResults) -> None:
                 state = inst.get("State", {}).get("Name", "unknown")
                 iid = inst.get("InstanceId", "unknown")
                 log.info("  Instance: %s | Type: %s | State: %s", iid, itype, state)
-                results.findings["ec2"]["instances"].append(
-                    {"id": iid, "type": itype, "state": state}
-                )
+                results.findings["ec2"]["instances"].append({"id": iid, "type": itype, "state": state})
 
     # Security Groups — look for 0.0.0.0/0 ingress
     resp = safe_call(results, "ec2", "DescribeSecurityGroups", ec2.describe_security_groups)
@@ -274,7 +261,9 @@ def enumerate_ec2(session: boto3.Session, results: EnumerationResults) -> None:
                         port = perm.get("FromPort", "all")
                         log.warning(
                             "  [RISK] SG %s (%s): Port %s open to 0.0.0.0/0",
-                            sg["GroupId"], sg.get("GroupName", ""), port,
+                            sg["GroupId"],
+                            sg.get("GroupName", ""),
+                            port,
                         )
                         results.add_risk(
                             "HIGH",
@@ -289,10 +278,7 @@ def enumerate_ec2(session: boto3.Session, results: EnumerationResults) -> None:
         log.info("VPCs: %d", len(vpcs))
 
     # Snapshots
-    resp = safe_call(
-        results, "ec2", "DescribeSnapshots",
-        ec2.describe_snapshots, OwnerIds=["self"]
-    )
+    resp = safe_call(results, "ec2", "DescribeSnapshots", ec2.describe_snapshots, OwnerIds=["self"])
     if resp:
         snaps = resp.get("Snapshots", [])
         log.info("EBS Snapshots (owned): %d", len(snaps))
@@ -325,15 +311,14 @@ def enumerate_lambda(session: boto3.Session, results: EnumerationResults) -> Non
         role = fn.get("Role", "unknown")
         env = fn.get("Environment", {}).get("Variables", {})
 
-        results.findings["lambda"]["functions"].append(
-            {"name": fname, "role": role, "env_var_count": len(env)}
-        )
+        results.findings["lambda"]["functions"].append({"name": fname, "role": role, "env_var_count": len(env)})
         log.info("  Function: %-40s | Role: %s", fname, role)
 
         if env:
             log.warning(
                 "  [RISK] Function %s has %d environment variables (may contain secrets)",
-                fname, len(env),
+                fname,
+                len(env),
             )
             results.add_risk(
                 "MEDIUM",
@@ -342,10 +327,7 @@ def enumerate_lambda(session: boto3.Session, results: EnumerationResults) -> Non
             )
 
         # Get policy (resource-based policy)
-        safe_call(
-            results, "lambda", "GetPolicy",
-            lam.get_policy, FunctionName=fname
-        )
+        safe_call(results, "lambda", "GetPolicy", lam.get_policy, FunctionName=fname)
 
 
 def enumerate_rds(session: boto3.Session, results: EnumerationResults) -> None:
@@ -364,7 +346,10 @@ def enumerate_rds(session: boto3.Session, results: EnumerationResults) -> None:
 
             log.info(
                 "  RDS: %-30s | Engine: %-12s | Public: %-5s | Encrypted: %s",
-                db_id, engine, publicly, encrypted,
+                db_id,
+                engine,
+                publicly,
+                encrypted,
             )
 
             if publicly:

@@ -36,7 +36,6 @@ import argparse
 import logging
 import sys
 import time
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -71,9 +70,7 @@ def assess_permissive_rules(session: boto3.Session) -> list[dict]:
 
     try:
         # Search for security groups with 0.0.0.0/0 rules
-        resp = ec2.describe_security_groups(
-            Filters=[{"Name": "ip-permission.cidr", "Values": ["0.0.0.0/0"]}]
-        )
+        resp = ec2.describe_security_groups(Filters=[{"Name": "ip-permission.cidr", "Values": ["0.0.0.0/0"]}])
         for sg in resp.get("SecurityGroups", []):
             for perm in sg.get("IpPermissions", []):
                 for ip_range in perm.get("IpRanges", []):
@@ -82,14 +79,13 @@ def assess_permissive_rules(session: boto3.Session) -> list[dict]:
                         to_port = perm.get("ToPort", 65535)
                         protocol = perm.get("IpProtocol", "-1")
 
-                        service = "All traffic" if protocol == "-1" else \
-                                  HIGH_RISK_PORTS.get(from_port, f"port {from_port}")
+                        service = (
+                            "All traffic" if protocol == "-1" else HIGH_RISK_PORTS.get(from_port, f"port {from_port}")
+                        )
 
-                        severity = "CRITICAL" if (
-                            protocol == "-1" or
-                            from_port in (22, 3389) or
-                            from_port == 0
-                        ) else "HIGH"
+                        severity = (
+                            "CRITICAL" if (protocol == "-1" or from_port in (22, 3389) or from_port == 0) else "HIGH"
+                        )
 
                         finding = {
                             "sg_id": sg["GroupId"],
@@ -105,9 +101,7 @@ def assess_permissive_rules(session: boto3.Session) -> list[dict]:
                         findings.append(finding)
 
         # Also search for ::/0 (IPv6)
-        resp6 = ec2.describe_security_groups(
-            Filters=[{"Name": "ip-permission.ipv6-cidr", "Values": ["::/0"]}]
-        )
+        resp6 = ec2.describe_security_groups(Filters=[{"Name": "ip-permission.ipv6-cidr", "Values": ["::/0"]}])
         for sg in resp6.get("SecurityGroups", []):
             for perm in sg.get("IpPermissions", []):
                 for ipv6_range in perm.get("Ipv6Ranges", []):
@@ -117,17 +111,19 @@ def assess_permissive_rules(session: boto3.Session) -> list[dict]:
                         protocol = perm.get("IpProtocol", "-1")
                         service = HIGH_RISK_PORTS.get(from_port, f"port {from_port}")
 
-                        findings.append({
-                            "sg_id": sg["GroupId"],
-                            "sg_name": sg.get("GroupName", ""),
-                            "protocol": protocol,
-                            "from_port": from_port,
-                            "to_port": to_port,
-                            "cidr": "::/0",
-                            "service": service,
-                            "severity": "HIGH",
-                            "description": ipv6_range.get("Description", ""),
-                        })
+                        findings.append(
+                            {
+                                "sg_id": sg["GroupId"],
+                                "sg_name": sg.get("GroupName", ""),
+                                "protocol": protocol,
+                                "from_port": from_port,
+                                "to_port": to_port,
+                                "cidr": "::/0",
+                                "service": service,
+                                "severity": "HIGH",
+                                "description": ipv6_range.get("Description", ""),
+                            }
+                        )
 
     except ClientError as e:
         log.warning("Could not describe security groups: %s", e.response["Error"]["Code"])
@@ -236,7 +232,10 @@ def authorize_rule(
         )
         log.info(
             "AuthorizeSecurityGroupIngress: %s — port %d/%s from %s",
-            sg_id, port, protocol, cidr,
+            sg_id,
+            port,
+            protocol,
+            cidr,
         )
         return True
     except ClientError as e:
@@ -246,7 +245,8 @@ def authorize_rule(
             return True
         log.error(
             "AuthorizeSecurityGroupIngress failed: %s — %s",
-            code, e.response["Error"]["Message"],
+            code,
+            e.response["Error"]["Message"],
         )
         return False
 
@@ -273,7 +273,10 @@ def revoke_rule(
         )
         log.info(
             "RevokeSecurityGroupIngress: %s — port %d/%s from %s",
-            sg_id, port, protocol, cidr,
+            sg_id,
+            port,
+            protocol,
+            cidr,
         )
         return True
     except ClientError as e:
@@ -372,9 +375,7 @@ def main() -> None:
             try:
                 vpcs = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
                 if not vpcs["Vpcs"]:
-                    log.error(
-                        "No default VPC found. Create one or specify --security-group-id."
-                    )
+                    log.error("No default VPC found. Create one or specify --security-group-id.")
                     sys.exit(1)
                 vpc_id = vpcs["Vpcs"][0]["VpcId"]
                 sg_id = get_or_create_test_sg(ec2, vpc_id)
@@ -390,16 +391,14 @@ def main() -> None:
         print(f"  Security Group:  {sg_id}")
         print(f"  Port:            {args.port} ({service_name})")
         print(f"  Protocol:        {args.protocol}")
-        print(f"  CIDR:            0.0.0.0/0 (ALL INTERNET)")
+        print("  CIDR:            0.0.0.0/0 (ALL INTERNET)")
         print()
         print("Adding ingress rule...")
 
         authorized = authorize_rule(ec2, sg_id, args.port, "0.0.0.0/0", args.protocol)
 
         if authorized:
-            log.info(
-                "AuthorizeSecurityGroupIngress event generated — CDET-013 should fire"
-            )
+            log.info("AuthorizeSecurityGroupIngress event generated — CDET-013 should fire")
             log.info("Waiting 2 seconds before revocation (for CloudTrail capture)...")
             time.sleep(2)
 
@@ -408,19 +407,18 @@ def main() -> None:
 
             if revoked:
                 log.info("Rule successfully revoked — exposure window was ~2 seconds")
-                log.info(
-                    "CloudTrail events generated: "
-                    "AuthorizeSecurityGroupIngress + RevokeSecurityGroupIngress"
-                )
+                log.info("CloudTrail events generated: AuthorizeSecurityGroupIngress + RevokeSecurityGroupIngress")
             else:
                 log.error(
                     "REVOCATION FAILED — manually revoke port %d 0.0.0.0/0 rule on %s",
-                    args.port, sg_id,
+                    args.port,
+                    sg_id,
                 )
                 log.error(
-                    "Run: aws ec2 revoke-security-group-ingress --group-id %s "
-                    "--protocol %s --port %d --cidr 0.0.0.0/0",
-                    sg_id, args.protocol, args.port,
+                    "Run: aws ec2 revoke-security-group-ingress --group-id %s --protocol %s --port %d --cidr 0.0.0.0/0",
+                    sg_id,
+                    args.protocol,
+                    args.port,
                 )
                 sys.exit(1)
 
@@ -432,7 +430,8 @@ def main() -> None:
                 except ClientError as e:
                     log.warning(
                         "Could not delete test SG %s: %s — delete manually",
-                        sg_id, e.response["Error"]["Code"],
+                        sg_id,
+                        e.response["Error"]["Code"],
                     )
     else:
         # Dry-run output
@@ -445,14 +444,14 @@ def main() -> None:
         print(f"  Security Group:  {sg_display}")
         print(f"  Protocol:        {args.protocol}")
         print(f"  Port:            {args.port} ({service_name})")
-        print(f"  CIDR:            0.0.0.0/0 (ALL INTERNET)")
+        print("  CIDR:            0.0.0.0/0 (ALL INTERNET)")
         print()
         print("AWS CLI equivalent:")
-        print(f"  aws ec2 authorize-security-group-ingress \\")
+        print("  aws ec2 authorize-security-group-ingress \\")
         print(f"    --group-id {sg_display} \\")
         print(f"    --protocol {args.protocol} \\")
         print(f"    --port {args.port} \\")
-        print(f"    --cidr 0.0.0.0/0")
+        print("    --cidr 0.0.0.0/0")
         print()
         print("[DRY-RUN] No changes made. Add --execute to generate real CloudTrail events.")
 

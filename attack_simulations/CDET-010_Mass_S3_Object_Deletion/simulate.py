@@ -161,8 +161,8 @@ def dry_run(s3_client, bucket: str) -> int:
         print(f"  ... and {count - 20} more objects")
 
     print()
-    print(f"[DRY-RUN] No objects deleted. Add --execute --confirm to actually delete.")
-    print(f"[WARNING] This operation would be IRREVERSIBLE without versioning.")
+    print("[DRY-RUN] No objects deleted. Add --execute --confirm to actually delete.")
+    print("[WARNING] This operation would be IRREVERSIBLE without versioning.")
     return count
 
 
@@ -201,9 +201,7 @@ def execute_deletion(s3_client, bucket: str) -> None:
         log.warning("%d objects could not be deleted (check permissions)", total_errors)
 
 
-def _delete_batch(
-    s3_client, bucket: str, batch: list[dict], batch_num: int
-) -> tuple[int, int]:
+def _delete_batch(s3_client, bucket: str, batch: list[dict], batch_num: int) -> tuple[int, int]:
     """Execute a single DeleteObjects call for up to 1000 objects."""
     try:
         resp = s3_client.delete_objects(
@@ -216,7 +214,9 @@ def _delete_batch(
         for err in resp.get("Errors", []):
             log.warning(
                 "  Error deleting %s: %s — %s",
-                err.get("Key"), err.get("Code"), err.get("Message"),
+                err.get("Key"),
+                err.get("Code"),
+                err.get("Message"),
             )
         return deleted, errors
     except ClientError as e:
@@ -247,8 +247,7 @@ def main() -> None:
     parser.add_argument(
         "--confirm",
         action="store_true",
-        help="Confirm you understand deletion is PERMANENT and IRREVERSIBLE. "
-             "Required together with --execute.",
+        help="Confirm you understand deletion is PERMANENT and IRREVERSIBLE. Required together with --execute.",
     )
     parser.add_argument(
         "--profile",
@@ -319,7 +318,7 @@ def main() -> None:
         print()
 
         # Final safety check — require typing bucket name to confirm
-        confirm_name = input(f"Type the bucket name to confirm deletion: ")
+        confirm_name = input("Type the bucket name to confirm deletion: ")
         if confirm_name != args.bucket:
             log.error("Bucket name mismatch. Aborting.")
             sys.exit(1)

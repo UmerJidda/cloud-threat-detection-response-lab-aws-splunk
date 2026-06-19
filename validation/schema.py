@@ -49,15 +49,11 @@ class FieldAssertion:
             return False, f"Field '{self.field_name}' is empty"
 
         if self.expected_value is not None and value != self.expected_value:
-            return False, (
-                f"Field '{self.field_name}': expected={self.expected_value!r}, "
-                f"got={value!r}"
-            )
+            return False, (f"Field '{self.field_name}': expected={self.expected_value!r}, got={value!r}")
 
         if self.expected_type is not None and not isinstance(value, eval(self.expected_type)):
             return False, (
-                f"Field '{self.field_name}' wrong type: "
-                f"expected={self.expected_type}, got={type(value).__name__}"
+                f"Field '{self.field_name}' wrong type: expected={self.expected_type}, got={type(value).__name__}"
             )
 
         return True, "ok"
@@ -132,11 +128,15 @@ class DetectionValidationSummary:
 
     @property
     def all_passed(self) -> bool:
-        results = [r for r in [
-            self.positive_result,
-            self.negative_result,
-            self.edge_result,
-        ] if r is not None]
+        results = [
+            r
+            for r in [
+                self.positive_result,
+                self.negative_result,
+                self.edge_result,
+            ]
+            if r is not None
+        ]
         return all(r.passed for r in results)
 
     @property

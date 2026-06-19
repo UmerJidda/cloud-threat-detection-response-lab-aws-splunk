@@ -1,0 +1,189 @@
+<dashboard version="1.1" theme="dark">
+  <label>Cloud Security Executive Dashboard</label>
+  <description>CISO-level security metrics for the Cloud Threat Detection Lab — alert volumes, critical incident counts, ATT&amp;CK coverage, and threat trends for executive reporting.</description>
+  <refresh>3600</refresh>
+
+  <!-- ============================================================
+       ROW 1: Top-Line KPIs — Four Single Value Tiles
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Total Alerts This Month</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-30d
+            | stats count
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">none</option>
+        <option name="useColors">false</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">ALERTS (LAST 30 DAYS)</option>
+        <option name="showSparkline">1</option>
+        <option name="sparklineFields">count</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Critical Incidents This Month</title>
+      <single>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-30d enriched_severity=critical
+            | stats count
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[1]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">CRITICAL SEVERITY (LAST 30 DAYS)</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ATT&amp;CK Tactic Coverage</title>
+      <single>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | where status="Active"
+            | stats dc(tactic) AS covered_tactics
+            | eval total_tactics=14
+            | eval coverage_pct=round((covered_tactics / total_tactics) * 100, 0)
+            | eval display=covered_tactics . " / " . total_tactics . " Tactics"
+            | fields coverage_pct
+          </query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[50,70]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">%</option>
+        <option name="underLabel">ATT&amp;CK TACTIC COVERAGE</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Active Detections</title>
+      <single>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | where status="Active"
+            | stats count AS active_detections
+            | eval total=14
+            | eval display=active_detections . " of " . total
+            | fields active_detections
+          </query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[8,11]</option>
+        <option name="useColors">true</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">ACTIVE DETECTIONS (OF 14)</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 2: Alert Volume Trend (30d Area Chart)
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Alert Volume Trend by Severity (Last 30 Days)</title>
+      <chart>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-30d
+            | timechart span=1d count by enriched_severity
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Date</option>
+        <option name="charting.axisTitleY.text">Alert Count</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.seriesColors">["0xdc4e41","0xf1813f","0xf8be34","0x53a051"]</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================================
+       ROW 3: MTTD by Tactic + Top Threats
+       ============================================================ -->
+  <row>
+    <panel>
+      <title>Detection Coverage by ATT&amp;CK Tactic</title>
+      <table>
+        <search>
+          <query>
+            | inputlookup detection_catalog.csv
+            | stats count AS total_detections
+                    sum(eval(if(status="Active",1,0))) AS active_detections
+                    by tactic
+            | eval coverage_pct=round((active_detections / total_detections) * 100, 0)
+            | eval coverage_label=case(
+                coverage_pct=100,    "FULL",
+                coverage_pct &gt;= 50, "PARTIAL",
+                true(),              "MINIMAL"
+              )
+            | sort tactic
+            | rename tactic AS "ATT&amp;CK Tactic"
+                     total_detections AS "Total"
+                     active_detections AS "Active"
+                     coverage_pct AS "Coverage %"
+                     coverage_label AS "Coverage Level"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="Coverage Level">
+          <colorPalette type="map">{"FULL": "#53a051", "PARTIAL": "#f8be34", "MINIMAL": "#dc4e41"}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Top Threats This Month</title>
+      <table>
+        <search>
+          <query>
+            index=cdet_alerts earliest=-30d
+            | stats count by attack_tactic attack_technique detection_id enriched_severity
+            | sort -count
+            | head 5
+            | rename attack_tactic AS "ATT&amp;CK Tactic"
+                     attack_technique AS "Technique"
+                     detection_id AS "Detection ID"
+                     enriched_severity AS "Severity"
+                     count AS "Alert Count"
+          </query>
+          <earliest>-30d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{"critical": "#dc4e41", "high": "#f1813f", "medium": "#f8be34", "low": "#53a051"}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="Detection ID">
+            <link target="_blank">/app/search/search?q=index%3Dcdet_alerts%20detection_id%3D"$row.Detection ID$"%20earliest%3D-30d&amp;earliest=-30d&amp;latest=now</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

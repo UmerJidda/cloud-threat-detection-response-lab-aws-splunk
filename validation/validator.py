@@ -41,6 +41,7 @@ ROOT = Path(__file__).parent.parent
 
 # ── Test case registry ────────────────────────────────────────────────────────
 
+
 def _load_test_case_definitions() -> dict[str, list[TestCase]]:
     """
     Load test case definitions from validation/test_cases/<CDET-XXX>/ directories.
@@ -94,18 +95,23 @@ def _build_test_cases(detection_id: str, expected: dict[str, Any]) -> list[TestC
     ]
 
     # Add detection-specific fields from expected_alert.json
-    skip_keys = {"detection_id", "severity", "urgency", "tactic", "technique",
-                 "_time", "alert_title", "confidence", "technique_name"}
+    skip_keys = {
+        "detection_id",
+        "severity",
+        "urgency",
+        "tactic",
+        "technique",
+        "_time",
+        "alert_title",
+        "confidence",
+        "technique_name",
+    }
     for key, val in expected.items():
         if key not in skip_keys:
-            required_fields.append(
-                FieldAssertion(key, must_exist=True, must_be_nonempty=bool(val))
-            )
+            required_fields.append(FieldAssertion(key, must_exist=True, must_be_nonempty=bool(val)))
 
     positive_sample = _find_sample_file(detection_id, "malicious")
-    negative_sample = _find_sample_file(detection_id, "benign") or _find_sample_file(
-        detection_id, "suppressed"
-    )
+    negative_sample = _find_sample_file(detection_id, "benign") or _find_sample_file(detection_id, "suppressed")
 
     cases = [
         TestCase(
@@ -128,7 +134,7 @@ def _build_test_cases(detection_id: str, expected: dict[str, Any]) -> list[TestC
             test_case_type=TestCaseType.NEGATIVE,
             name=f"{detection_id} — negative case (suppression)",
             description="Detection must NOT fire when principal is in suppression lookup",
-            sample_file=negative_sample or Path(f"sample_logs/cloudtrail/benign/normal_iam_activity.ndjson"),
+            sample_file=negative_sample or Path("sample_logs/cloudtrail/benign/normal_iam_activity.ndjson"),
             alert_assertion=AlertAssertion(
                 should_fire=False,
                 max_alert_count=0,
@@ -155,6 +161,7 @@ def _find_sample_file(detection_id: str, category: str) -> Path | None:
 
 
 # ── Sample-based detection runner ─────────────────────────────────────────────
+
 
 def _load_ndjson(path: Path) -> list[dict[str, Any]]:
     """Load all events from an NDJSON file."""
@@ -229,12 +236,16 @@ def _run_heuristic_detection(
         if detection_id == "CDET-001":
             if event_name == "CreateUser" and principal_arn not in _SUPPRESSED_ARNS:
                 fired = True
-                alert.update({
-                    "severity": "high", "urgency": 2,
-                    "tactic": "Persistence", "technique": "T1136.003",
-                    "technique_name": "Create Account: Cloud Account",
-                    "new_user_name": rp.get("userName", ""),
-                })
+                alert.update(
+                    {
+                        "severity": "high",
+                        "urgency": 2,
+                        "tactic": "Persistence",
+                        "technique": "T1136.003",
+                        "technique_name": "Create Account: Cloud Account",
+                        "new_user_name": rp.get("userName", ""),
+                    }
+                )
 
         elif detection_id == "CDET-002":
             if event_name == "CreateAccessKey":
@@ -243,23 +254,31 @@ def _run_heuristic_detection(
                 is_cross_user = creator and target_user and creator != target_user
                 if is_cross_user:
                     fired = True
-                    alert.update({
-                        "severity": "high", "urgency": 2,
-                        "tactic": "Persistence", "technique": "T1098.001",
-                        "technique_name": "Account Manipulation: Additional Cloud Credentials",
-                        "key_owner_name": target_user,
-                        "is_cross_user": "true",
-                    })
+                    alert.update(
+                        {
+                            "severity": "high",
+                            "urgency": 2,
+                            "tactic": "Persistence",
+                            "technique": "T1098.001",
+                            "technique_name": "Account Manipulation: Additional Cloud Credentials",
+                            "key_owner_name": target_user,
+                            "is_cross_user": "true",
+                        }
+                    )
 
         elif detection_id == "CDET-003":
             if event_name in ("StopLogging", "DeleteTrail"):
                 fired = True
-                alert.update({
-                    "severity": "critical", "urgency": 1,
-                    "tactic": "Defense Evasion", "technique": "T1562.008",
-                    "technique_name": "Impair Defenses: Disable or Modify Cloud Logs",
-                    "disable_reason": f"Trail {event_name.lower()}",
-                })
+                alert.update(
+                    {
+                        "severity": "critical",
+                        "urgency": 1,
+                        "tactic": "Defense Evasion",
+                        "technique": "T1562.008",
+                        "technique_name": "Impair Defenses: Disable or Modify Cloud Logs",
+                        "disable_reason": f"Trail {event_name.lower()}",
+                    }
+                )
             elif event_name == "UpdateTrail":
                 degraded = (
                     rp.get("enableLogFileValidation") is False
@@ -268,12 +287,16 @@ def _run_heuristic_detection(
                 )
                 if degraded:
                     fired = True
-                    alert.update({
-                        "severity": "critical", "urgency": 1,
-                        "tactic": "Defense Evasion", "technique": "T1562.008",
-                        "technique_name": "Impair Defenses: Disable or Modify Cloud Logs",
-                        "disable_reason": "Trail coverage degraded via UpdateTrail",
-                    })
+                    alert.update(
+                        {
+                            "severity": "critical",
+                            "urgency": 1,
+                            "tactic": "Defense Evasion",
+                            "technique": "T1562.008",
+                            "technique_name": "Impair Defenses: Disable or Modify Cloud Logs",
+                            "disable_reason": "Trail coverage degraded via UpdateTrail",
+                        }
+                    )
 
         elif detection_id == "CDET-004":
             _ADMIN_POLICIES = {
@@ -284,54 +307,68 @@ def _run_heuristic_detection(
             policy_arn = rp.get("policyArn", "")
             if event_name in ("AttachUserPolicy", "AttachRolePolicy") and policy_arn in _ADMIN_POLICIES:
                 fired = True
-                alert.update({
-                    "severity": "critical", "urgency": 1,
-                    "tactic": "Privilege Escalation", "technique": "T1078.004",
-                    "technique_name": "Valid Accounts: Cloud Accounts",
-                    "policy_arn": policy_arn,
-                    "is_wildcard_inline": "false",
-                })
+                alert.update(
+                    {
+                        "severity": "critical",
+                        "urgency": 1,
+                        "tactic": "Privilege Escalation",
+                        "technique": "T1078.004",
+                        "technique_name": "Valid Accounts: Cloud Accounts",
+                        "policy_arn": policy_arn,
+                        "is_wildcard_inline": "false",
+                    }
+                )
             elif event_name in ("PutUserPolicy", "PutRolePolicy"):
                 doc = str(rp.get("policyDocument", ""))
                 if '"*"' in doc or "'*'" in doc:
                     fired = True
-                    alert.update({
-                        "severity": "critical", "urgency": 1,
-                        "tactic": "Privilege Escalation", "technique": "T1078.004",
-                        "technique_name": "Valid Accounts: Cloud Accounts",
-                        "is_wildcard_inline": "true",
-                    })
+                    alert.update(
+                        {
+                            "severity": "critical",
+                            "urgency": 1,
+                            "tactic": "Privilege Escalation",
+                            "technique": "T1078.004",
+                            "technique_name": "Valid Accounts: Cloud Accounts",
+                            "is_wildcard_inline": "true",
+                        }
+                    )
 
         elif detection_id == "CDET-005":
             if event_name in ("CreateRole", "UpdateAssumeRolePolicy"):
                 doc = str(rp.get("assumeRolePolicyDocument", rp.get("policyDocument", "")))
                 # Check for external account IDs
                 import re
-                account_ids = re.findall(r'\b(\d{12})\b', doc)
+
+                account_ids = re.findall(r"\b(\d{12})\b", doc)
                 external = [a for a in account_ids if a not in _APPROVED_ACCOUNTS]
                 if external:
                     fired = True
-                    alert.update({
-                        "severity": "high", "urgency": 2,
-                        "tactic": "Privilege Escalation", "technique": "T1484.002",
-                        "technique_name": "Domain or Tenant Policy Modification: Trust Modification",
-                        "external_account_id": external[0],
-                    })
+                    alert.update(
+                        {
+                            "severity": "high",
+                            "urgency": 2,
+                            "tactic": "Privilege Escalation",
+                            "technique": "T1484.002",
+                            "technique_name": "Domain or Tenant Policy Modification: Trust Modification",
+                            "external_account_id": external[0],
+                        }
+                    )
 
         elif detection_id == "CDET-006":
             if principal_type == "Root":
                 fired = True
                 mfa = event.get("additionalEventData", {}).get("MFAUsed", "No")
-                alert.update({
-                    "severity": "critical", "urgency": 1,
-                    "tactic": "Initial Access", "technique": "T1078.004",
-                    "technique_name": "Valid Accounts: Cloud Accounts",
-                    "mfa_used": mfa,
-                    "root_action_category": (
-                        "console_login" if event_name == "ConsoleLogin"
-                        else "api_call"
-                    ),
-                })
+                alert.update(
+                    {
+                        "severity": "critical",
+                        "urgency": 1,
+                        "tactic": "Initial Access",
+                        "technique": "T1078.004",
+                        "technique_name": "Valid Accounts: Cloud Accounts",
+                        "mfa_used": mfa,
+                        "root_action_category": ("console_login" if event_name == "ConsoleLogin" else "api_call"),
+                    }
+                )
 
         elif detection_id == "CDET-007":
             si = uid.get("sessionContext", {}).get("sessionIssuer", {})
@@ -341,69 +378,92 @@ def _run_heuristic_detection(
                 and not source_ip.startswith(("10.", "172.16.", "172.17.", "169.254."))
             ):
                 fired = True
-                alert.update({
-                    "severity": "high", "urgency": 2,
-                    "tactic": "Credential Access", "technique": "T1552.005",
-                    "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
-                    "detection_source": "cloudtrail",
-                    "session_issuer_arn": si.get("arn", ""),
-                })
+                alert.update(
+                    {
+                        "severity": "high",
+                        "urgency": 2,
+                        "tactic": "Credential Access",
+                        "technique": "T1552.005",
+                        "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
+                        "detection_source": "cloudtrail",
+                        "session_issuer_arn": si.get("arn", ""),
+                    }
+                )
             # Also match GuardDuty findings
-            if event.get("type", "").startswith("UnauthorizedAccess") and "InstanceCredentialExfiltration" in event.get("type", ""):
+            if event.get("type", "").startswith("UnauthorizedAccess") and "InstanceCredentialExfiltration" in event.get(
+                "type", ""
+            ):
                 fired = True
-                alert.update({
-                    "severity": "high", "urgency": 2,
-                    "tactic": "Credential Access", "technique": "T1552.005",
-                    "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
-                    "detection_source": "guardduty",
-                })
+                alert.update(
+                    {
+                        "severity": "high",
+                        "urgency": 2,
+                        "tactic": "Credential Access",
+                        "technique": "T1552.005",
+                        "technique_name": "Unsecured Credentials: Cloud Instance Metadata API",
+                        "detection_source": "guardduty",
+                    }
+                )
 
         elif detection_id == "CDET-009":
             if event_name == "PutBucketReplication":
                 config = str(rp.get("replicationConfiguration", ""))
                 import re
-                account_ids = re.findall(r'\b(\d{12})\b', config)
+
+                account_ids = re.findall(r"\b(\d{12})\b", config)
                 external = [a for a in account_ids if a not in _APPROVED_ACCOUNTS]
                 if external:
                     fired = True
-                    alert.update({
-                        "severity": "high", "urgency": 2,
-                        "tactic": "Exfiltration", "technique": "T1537",
-                        "technique_name": "Transfer Data to Cloud Account",
-                        "destination_account_id": external[0],
-                        "source_bucket": rp.get("bucketName", ""),
-                    })
+                    alert.update(
+                        {
+                            "severity": "high",
+                            "urgency": 2,
+                            "tactic": "Exfiltration",
+                            "technique": "T1537",
+                            "technique_name": "Transfer Data to Cloud Account",
+                            "destination_account_id": external[0],
+                            "source_bucket": rp.get("bucketName", ""),
+                        }
+                    )
 
         elif detection_id == "CDET-011":
             if event_name == "RunInstances" and principal_arn not in _SUPPRESSED_ARNS:
                 itype = rp.get("instanceType", "")
                 fired = True
-                alert.update({
-                    "severity": "high", "urgency": 2,
-                    "tactic": "Impact", "technique": "T1496",
-                    "technique_name": "Resource Hijacking",
-                    "instance_type": itype,
-                    "instance_count": rp.get("maxCount", 1),
-                })
+                alert.update(
+                    {
+                        "severity": "high",
+                        "urgency": 2,
+                        "tactic": "Impact",
+                        "technique": "T1496",
+                        "technique_name": "Resource Hijacking",
+                        "instance_type": itype,
+                        "instance_count": rp.get("maxCount", 1),
+                    }
+                )
 
         elif detection_id == "CDET-012":
             if event_name == "AssumeRole":
                 target_arn = rp.get("roleArn", "")
                 import re
-                match = re.search(r':(\d{12}):', target_arn)
+
+                match = re.search(r":(\d{12}):", target_arn)
                 if match:
                     target_account = match.group(1)
                     if target_account not in _APPROVED_ACCOUNTS:
                         fired = True
                         is_chained = principal_type == "AssumedRole"
-                        alert.update({
-                            "severity": "critical" if is_chained else "high",
-                            "urgency": 1 if is_chained else 2,
-                            "tactic": "Lateral Movement", "technique": "T1550.001",
-                            "technique_name": "Use Alternate Authentication Material: Application Access Token",
-                            "is_chained_assumption": str(is_chained).lower(),
-                            "target_account_id": target_account,
-                        })
+                        alert.update(
+                            {
+                                "severity": "critical" if is_chained else "high",
+                                "urgency": 1 if is_chained else 2,
+                                "tactic": "Lateral Movement",
+                                "technique": "T1550.001",
+                                "technique_name": "Use Alternate Authentication Material: Application Access Token",
+                                "is_chained_assumption": str(is_chained).lower(),
+                                "target_account_id": target_account,
+                            }
+                        )
 
         elif detection_id == "CDET-013":
             if event_name == "AuthorizeSecurityGroupIngress":
@@ -419,13 +479,17 @@ def _run_heuristic_detection(
                             ip_ranges.append(cidr_item.get("cidrIp", ""))
                 if any(c in ("0.0.0.0/0", "::/0") for c in ip_ranges):
                     fired = True
-                    alert.update({
-                        "severity": "high", "urgency": 2,
-                        "tactic": "Defense Evasion", "technique": "T1562.007",
-                        "technique_name": "Impair Defenses: Disable or Modify Cloud Firewall",
-                        "group_id": rp.get("groupId", ""),
-                        "cidr_range": "0.0.0.0/0",
-                    })
+                    alert.update(
+                        {
+                            "severity": "high",
+                            "urgency": 2,
+                            "tactic": "Defense Evasion",
+                            "technique": "T1562.007",
+                            "technique_name": "Impair Defenses: Disable or Modify Cloud Firewall",
+                            "group_id": rp.get("groupId", ""),
+                            "cidr_range": "0.0.0.0/0",
+                        }
+                    )
 
         elif detection_id == "CDET-014":
             if event_name in ("DeleteObject", "DeleteObjects", "DeleteBucket"):
@@ -436,17 +500,21 @@ def _run_heuristic_detection(
                 _CLOUDTRAIL_BUCKETS = {"example-org-cloudtrail-logs", "example-org-cloudtrail-secondary"}
                 if bucket in _CLOUDTRAIL_BUCKETS:
                     fired = True
-                    alert.update({
-                        "severity": "critical", "urgency": 1,
-                        "tactic": "Defense Evasion", "technique": "T1070.004",
-                        "technique_name": "Indicator Removal: File Deletion",
-                        "bucket_name": bucket,
-                        "deletion_type": (
-                            "CRITICAL: Entire CloudTrail log bucket deleted"
-                            if event_name == "DeleteBucket"
-                            else "Batch or single CloudTrail log deletion"
-                        ),
-                    })
+                    alert.update(
+                        {
+                            "severity": "critical",
+                            "urgency": 1,
+                            "tactic": "Defense Evasion",
+                            "technique": "T1070.004",
+                            "technique_name": "Indicator Removal: File Deletion",
+                            "bucket_name": bucket,
+                            "deletion_type": (
+                                "CRITICAL: Entire CloudTrail log bucket deleted"
+                                if event_name == "DeleteBucket"
+                                else "Batch or single CloudTrail log deletion"
+                            ),
+                        }
+                    )
 
         elif detection_id == "CDET-010":
             # Aggregate events — handled separately in _run_aggregation_detection
@@ -473,6 +541,7 @@ def _eval_cdet008(
     suppressed: set[str],
 ) -> list[dict[str, Any]]:
     from collections import defaultdict
+
     counts: dict[str, dict[str, Any]] = defaultdict(lambda: {"total": 0, "apis": set(), "ips": set()})
     for e in events:
         uid = e.get("userIdentity", {})
@@ -488,17 +557,21 @@ def _eval_cdet008(
     alerts = []
     for arn, data in counts.items():
         if data["total"] >= 50 and len(data["apis"]) >= 5:
-            alerts.append({
-                "detection_id": "CDET-008",
-                "severity": "medium", "urgency": 3,
-                "tactic": "Discovery", "technique": "T1580",
-                "technique_name": "Cloud Infrastructure Discovery",
-                "principal_arn": arn,
-                "total_calls": data["total"],
-                "unique_api_calls": len(data["apis"]),
-                "event_source_ip": list(data["ips"])[0] if data["ips"] else "",
-                "region": "us-east-1",
-            })
+            alerts.append(
+                {
+                    "detection_id": "CDET-008",
+                    "severity": "medium",
+                    "urgency": 3,
+                    "tactic": "Discovery",
+                    "technique": "T1580",
+                    "technique_name": "Cloud Infrastructure Discovery",
+                    "principal_arn": arn,
+                    "total_calls": data["total"],
+                    "unique_api_calls": len(data["apis"]),
+                    "event_source_ip": list(data["ips"])[0] if data["ips"] else "",
+                    "region": "us-east-1",
+                }
+            )
     return alerts
 
 
@@ -507,6 +580,7 @@ def _eval_cdet010(
     suppressed: set[str],
 ) -> list[dict[str, Any]]:
     from collections import defaultdict
+
     by_principal: dict[str, dict[str, Any]] = defaultdict(
         lambda: {"count": 0, "estimated": 0, "buckets": set(), "ip": ""}
     )
@@ -530,23 +604,28 @@ def _eval_cdet010(
     alerts = []
     for arn, d in by_principal.items():
         if d["estimated"] >= 100 or d["count"] >= 20:
-            alerts.append({
-                "detection_id": "CDET-010",
-                "severity": "critical", "urgency": 1,
-                "tactic": "Impact", "technique": "T1485",
-                "technique_name": "Data Destruction",
-                "principal_arn": arn,
-                "total_delete_events": d["count"],
-                "estimated_objects_deleted": d["estimated"],
-                "buckets_targeted": len(d["buckets"]),
-                "bucket_names_str": ", ".join(d["buckets"]),
-                "event_source_ip": d["ip"],
-                "region": "us-east-1",
-            })
+            alerts.append(
+                {
+                    "detection_id": "CDET-010",
+                    "severity": "critical",
+                    "urgency": 1,
+                    "tactic": "Impact",
+                    "technique": "T1485",
+                    "technique_name": "Data Destruction",
+                    "principal_arn": arn,
+                    "total_delete_events": d["count"],
+                    "estimated_objects_deleted": d["estimated"],
+                    "buckets_targeted": len(d["buckets"]),
+                    "bucket_names_str": ", ".join(d["buckets"]),
+                    "event_source_ip": d["ip"],
+                    "region": "us-east-1",
+                }
+            )
     return alerts
 
 
 # ── Evaluator ─────────────────────────────────────────────────────────────────
+
 
 def _evaluate_test_case(test_case: TestCase) -> ValidationResult:
     """Run a single test case and return a ValidationResult."""
@@ -570,10 +649,7 @@ def _evaluate_test_case(test_case: TestCase) -> ValidationResult:
 
     if assertion.should_fire:
         if not alerts:
-            errors.append(
-                f"Expected detection to fire but got 0 alerts "
-                f"from {len(events)} events"
-            )
+            errors.append(f"Expected detection to fire but got 0 alerts from {len(events)} events")
         else:
             first = alerts[0]
             for fa in assertion.field_assertions:
@@ -583,16 +659,10 @@ def _evaluate_test_case(test_case: TestCase) -> ValidationResult:
                     errors.append(f"Field assertion failed: {reason}")
 
             if assertion.expected_severity and first.get("severity") != assertion.expected_severity:
-                errors.append(
-                    f"Severity mismatch: expected={assertion.expected_severity}, "
-                    f"got={first.get('severity')}"
-                )
+                errors.append(f"Severity mismatch: expected={assertion.expected_severity}, got={first.get('severity')}")
     else:
         if alerts:
-            errors.append(
-                f"Expected NO alerts but got {len(alerts)} "
-                f"(suppression may be incomplete)"
-            )
+            errors.append(f"Expected NO alerts but got {len(alerts)} (suppression may be incomplete)")
 
     result = TestResult.PASS if not errors else TestResult.FAIL
 
@@ -609,6 +679,7 @@ def _evaluate_test_case(test_case: TestCase) -> ValidationResult:
 
 # ── Report writer ──────────────────────────────────────────────────────────────
 
+
 def _write_report(summary: ValidationRunSummary, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     ts = summary.run_timestamp.replace(":", "").replace("-", "")[:15]
@@ -617,12 +688,14 @@ def _write_report(summary: ValidationRunSummary, output_dir: Path) -> Path:
     def _to_dict(obj: Any) -> Any:
         if hasattr(obj, "__dataclass_fields__"):
             from dataclasses import asdict
+
             return asdict(obj)
         if hasattr(obj, "value"):
             return obj.value
         return str(obj)
 
     import dataclasses
+
     report_path.write_text(
         json.dumps(dataclasses.asdict(summary), default=str, indent=2),
         encoding="utf-8",
@@ -633,10 +706,9 @@ def _write_report(summary: ValidationRunSummary, output_dir: Path) -> Path:
 
 # ── CLI entry point ────────────────────────────────────────────────────────────
 
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Run detection validation tests against sample NDJSON data."
-    )
+    parser = argparse.ArgumentParser(description="Run detection validation tests against sample NDJSON data.")
     parser.add_argument("--detection", help="Run tests for a single detection ID (e.g. CDET-001)")
     parser.add_argument("--all", action="store_true", help="Run tests for all detections")
     parser.add_argument(
@@ -703,11 +775,11 @@ def main(argv: list[str] | None = None) -> int:
         coverage_percent=coverage,
     )
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Validation Run {run_id}")
     print(f"Tested: {len(summaries)}  Passed: {passed}  Failed: {failed}")
     print(f"Coverage: {coverage}%")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     output_dir = ROOT / args.output_dir
     report_path = _write_report(run_summary, output_dir)

@@ -1,4 +1,4 @@
-# Cloud Threat Detection & Response Lab
+# Cloud Threat Detection Lab
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Splunk](https://img.shields.io/badge/splunk-9.x-green.svg)](https://www.splunk.com/)
@@ -6,127 +6,98 @@
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-v15-red.svg)](https://attack.mitre.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A production-quality cloud detection engineering program demonstrating end-to-end threat detection, real AWS telemetry collection, detection validation, and automated response. Built to reflect real-world enterprise cloud security operations workflows.
+> A production-quality cloud detection engineering program demonstrating the complete lifecycle: AWS telemetry collection → Splunk detection → alert enrichment → automated incident response. Built to reflect real-world enterprise cloud security operations.
 
 ---
 
-## Table of Contents
+## What This Project Demonstrates
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Lab Components](#lab-components)
-- [MITRE ATT&CK Coverage](#mitre-attck-coverage)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Detection Engineering Workflow](#detection-engineering-workflow)
-- [Phases & Roadmap](#phases--roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+This repository is a **complete cloud detection engineering program** — not a collection of scripts, but a structured platform with the same components a mature SOC operates:
 
----
-
-## Overview
-
-This repository implements a cloud-native detection engineering program against a real AWS environment. It covers the full detection engineering lifecycle:
-
-1. **Real AWS Telemetry Collection** — Python collectors using read-only APIs pull live CloudTrail, GuardDuty, Security Hub, IAM, and security group data
-2. **Detection Development** — Splunk SPL searches modeled on real adversary TTPs, mapped to MITRE ATT&CK
-3. **Detection Validation** — A validation framework tests detections against sample datasets, live CloudTrail history, and future attack simulation outputs
-4. **Threat Hunting** — Hypothesis-driven hunts using MITRE ATT&CK as a framework
-5. **Automated Response** — Python Lambda functions and Splunk Adaptive Response Actions
-6. **Incident Response** — Documented playbooks mapping each detection to a response procedure
-
-The project follows a **detection-first architecture**: all detection content and validation logic is fully implemented independently from attack execution. Attack simulations exist as code and documented procedures; live execution can be performed by a privileged operator without any changes to this repository.
-
-### AWS Credential Model
-
-All Python code uses `boto3`'s default credential chain. Configure credentials once with:
-
-```bash
-aws configure
-```
-
-No credentials are ever hardcoded, stored in environment variables, or committed to the repository. The minimum required permission set is a read-only security role (Security Auditor or equivalent).
+| Capability | What's Built | Files |
+|---|---|---|
+| **AWS Telemetry Collection** | 9 Python collector modules, read-only boto3, all 4 major log sources | `scripts/aws_collectors/` |
+| **Detection Library** | 14 MITRE ATT&CK–mapped Splunk detections across 9 tactics | `detections/` |
+| **Sample Telemetry** | 53 NDJSON test files — malicious, benign, and edge-case variants | `sample_logs/` |
+| **Detection Validation** | 42 test cases + Python heuristic validator + Splunk SPL tests | `validation/` |
+| **Attack Simulations** | 14 documented simulation packages with executable Python | `attack_simulations/` |
+| **Alert Enrichment** | ATT&CK context, IAM enrichment, severity escalation, IOC extraction | `scripts/alert_enrichment.py` |
+| **Incident Response** | 56 playbook files (triage → investigation → containment → recovery) | `playbooks/` |
+| **Automated Reporting** | 3 report formats: executive summary, analyst report, JSON | `scripts/incident_report_generator.py` |
+| **Splunk Dashboards** | 4 production-ready dashboard XMLs with SPL-backed panels | `splunk/dashboards/` |
+| **SOC Operations** | Escalation matrix, on-call procedures, investigation standards | `docs/soc_operations/` |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        AWS ENVIRONMENT                          │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │  CloudTrail  │  │  GuardDuty   │  │   VPC Flow Logs      │  │
-│  │  (All APIs)  │  │  (ML-based)  │  │   S3 Access Logs     │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
-│         │                 │                      │              │
-│         └────────────┬────┘──────────────────────┘              │
-│                      │                                          │
-│              ┌───────▼────────┐                                 │
-│              │   S3 Log Bucket │                                 │
-│              │  (Centralized) │                                 │
-│              └───────┬────────┘                                 │
-│                      │  SQS Notification                        │
-│                      ▼                                          │
-│              ┌───────────────┐      ┌─────────────────────┐    │
-│              │ Splunk Add-on │      │  Lambda Functions   │    │
-│              │  for AWS (SA) │      │  (Auto-Response)    │    │
-│              └───────┬───────┘      └──────────┬──────────┘    │
-└──────────────────────┼──────────────────────────┼──────────────┘
-                       │                          │
-        ┌──────────────▼──────────────────────────▼─────────────┐
-        │                    SPLUNK SIEM                         │
-        │                                                        │
-        │  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐  │
-        │  │  Correlation │  │    Threat    │  │  Dashboards │  │
-        │  │   Searches  │  │    Hunting   │  │  & Reports  │  │
-        │  │  (Detections)│  │   Notebooks  │  │             │  │
-        │  └─────────────┘  └──────────────┘  └─────────────┘  │
-        │                                                        │
-        │  ┌──────────────────────────────────────────────────┐  │
-        │  │          Adaptive Response Actions               │  │
-        │  │   (Isolate EC2 | Revoke IAM | Block IP)          │  │
-        │  └──────────────────────────────────────────────────┘  │
-        └───────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                           AWS ENVIRONMENT                            │
+│                                                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  │
+│  │ CloudTrail  │  │  GuardDuty  │  │ Security Hub │  │   IAM    │  │
+│  │ (all APIs)  │  │  (ML alerts)│  │  (ASFF fmt)  │  │  state   │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └────┬─────┘  │
+│         └────────────────┴─────────────────┴───────────────┘        │
+│                                    │                                 │
+└────────────────────────────────────┼─────────────────────────────────┘
+                                     │ boto3 (aws configure)
+                          ┌──────────▼──────────┐
+                          │  Python Collectors   │
+                          │  scripts/aws_collectors/
+                          │  cloudtrail_collector│
+                          │  guardduty_collector │
+                          │  securityhub_collector
+                          │  iam_collector       │
+                          └──────────┬──────────┘
+                                     │ NDJSON → data/collected/
+                          ┌──────────▼──────────┐
+                          │  CloudTrailParser    │
+                          │  (cloudtrail_parser) │
+                          │  → ParsedEvent list  │
+                          └──────────┬──────────┘
+                          ┌──────────▼──────────┐
+                          │     Splunk SIEM      │
+                          │  index=aws_cloudtrail│
+                          │  index=aws_security  │
+                          └──────────┬──────────┘
+                 ┌────────────────────────────────────┐
+                 │            Detection Layer          │
+                 │  14 SPL searches — cron every 5min  │
+                 │  11 lookup CSVs for suppression     │
+                 │  index=cdet_alerts on match         │
+                 └────────────────────┬───────────────┘
+                          ┌──────────▼──────────┐
+                          │   Alert Enrichment   │
+                          │  ATT&CK context      │
+                          │  IAM principal state │
+                          │  Severity escalation │
+                          │  IOC extraction      │
+                          └──────────┬──────────┘
+                 ┌────────────────────────────────────┐
+                 │         Response Layer              │
+                 │  Playbooks:  triage → investigate   │
+                 │              contain → recover      │
+                 │  Reports: executive / analyst / JSON│
+                 │  SOC dashboards (4 XMLs)            │
+                 └────────────────────────────────────┘
 ```
 
 ---
 
-## Lab Components
+## Technology Stack
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| AWS Telemetry Collection | Python 3.11 + Boto3 (read-only APIs) | Live CloudTrail, GuardDuty, IAM, Security Hub, security group data |
-| SIEM | Splunk Enterprise 9.x | Detection, alerting, hunting |
-| Detection Language | Splunk SPL | Correlation search logic |
-| Detection Validation | Python framework + sample datasets | Validate detections without live attack execution |
-| Automation | Python 3.11 + AWS Lambda + Boto3 | Automated response actions |
-| Threat Framework | MITRE ATT&CK v15 | TTP mapping and coverage analysis |
-| Attack Simulation | Atomic Red Team + custom scripts (code only) | Documentation and procedures for future execution |
-| IR Playbooks | Markdown + YAML | Structured incident response |
-| Testing | pytest + moto (AWS mock) | Unit/integration tests for collectors and automation |
-
----
-
-## MITRE ATT&CK Coverage
-
-Current detection coverage mapped to MITRE ATT&CK for Cloud (IaaS):
-
-| Tactic | Technique | Detection | Status |
-|--------|-----------|-----------|--------|
-| Initial Access | T1078.004 – Valid Accounts: Cloud Accounts | Impossible travel / unusual login geo | ✅ Active |
-| Persistence | T1098.001 – Account Manipulation: Additional Cloud Credentials | New IAM key created for existing user | ✅ Active |
-| Persistence | T1136.003 – Create Account: Cloud Account | New IAM user or role creation | ✅ Active |
-| Privilege Escalation | T1078.004 – Valid Accounts (Escalation) | Privilege escalation via policy attachment | ✅ Active |
-| Defense Evasion | T1562.008 – Impair Defenses: Disable Cloud Logs | CloudTrail logging disabled | ✅ Active |
-| Defense Evasion | T1070.004 – Indicator Removal: File Deletion | S3 bucket or CloudTrail log deletion | ✅ Active |
-| Credential Access | T1552.005 – Unsecured Credentials: Cloud Instance Metadata | EC2 metadata service abuse | ✅ Active |
-| Discovery | T1580 – Cloud Infrastructure Discovery | Excessive DescribeInstances / ListBuckets | ✅ Active |
-| Lateral Movement | T1550.001 – Use Alternate Authentication Material | Cross-account role assumption chain | ✅ Active |
-| Exfiltration | T1537 – Transfer Data to Cloud Account | S3 bucket replication to external account | ✅ Active |
-| Impact | T1485 – Data Destruction | Mass S3 object deletion | ✅ Active |
-| Impact | T1496 – Resource Hijacking | EC2 / Lambda compute resource abuse | ✅ Active |
+| Layer | Technology | Version | Purpose |
+|---|---|---|---|
+| Cloud Platform | AWS | — | CloudTrail, GuardDuty, SecurityHub, IAM, EC2, S3 |
+| Telemetry Collection | Python + boto3 | 3.11 / 1.34 | Read-only API collection, NDJSON output |
+| SIEM | Splunk Enterprise | 9.x | Detection, alerting, dashboards |
+| Detection Logic | Splunk SPL | — | Correlation searches with lookup-based suppression |
+| Validation | Python + pytest | 3.11 | Heuristic detectors mirroring SPL logic |
+| Threat Framework | MITRE ATT&CK | v15 | TTP mapping, 9 tactics, 13 techniques |
+| Structured Logging | structlog | 24.1 | Consistent log output across all Python modules |
+| CLI | click + rich | 8.x / 13.x | Collector CLI, validation runner |
 
 ---
 
@@ -134,253 +105,402 @@ Current detection coverage mapped to MITRE ATT&CK for Cloud (IaaS):
 
 ### Prerequisites
 
-- Splunk Enterprise 9.x with Splunk Add-on for AWS installed
-- AWS account with CloudTrail, GuardDuty, and VPC Flow Logs enabled
-- Python 3.11+ with `pip`
-- AWS CLI configured with appropriate credentials
-
-### 1. Clone the Repository
+- Python 3.11+
+- AWS CLI configured (`aws configure`) — read-only Security Auditor role sufficient
+- Splunk Enterprise 9.x (for live detection; sample data works offline)
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/CloudThreatDetectionLab.git
 cd CloudThreatDetectionLab
-```
-
-### 2. Install Python Dependencies
-
-```bash
 pip install -r requirements.txt
+aws configure          # enter your credentials once — all scripts use this
 ```
 
-### 3. Configure Environment
+### Collect Live AWS Telemetry
 
 ```bash
-cp config/lab_config.example.yaml config/lab_config.yaml
-# Edit config/lab_config.yaml with your Splunk settings and AWS account ID
+# Collect CloudTrail events from the last 24 hours
+python scripts/aws_collectors/collect_cli.py --service cloudtrail --region us-east-1
+
+# Collect all sources
+python scripts/aws_collectors/collect_cli.py --all --region us-east-1
+
+# Output written to data/collected/cloudtrail_YYYYMMDD.ndjson
 ```
 
-### 4. Configure AWS Credentials
+### Validate Detections Offline (No Splunk Required)
 
 ```bash
-aws configure
-# Enter your Access Key ID, Secret Access Key, and default region.
-# A read-only security role (Security Auditor) is sufficient.
+# Run Python heuristic validation against all 14 detections
+python scripts/detection_validator.py
+
+# Parse and inspect a sample log
+python scripts/cloudtrail_parser.py
 ```
 
-### 5. Collect Live AWS Telemetry
+### Load Sample Data into Splunk
 
 ```bash
-# Collect all sources (last 24 hours of CloudTrail + current state)
-python -m scripts.aws_collectors.collect_cli --all --region us-east-1 --output-dir data/collected
-
-# Or collect a single source
-python -m scripts.aws_collectors.collect_cli --collector guardduty --region us-east-1
-```
-
-### 6. Load Detections into Splunk
-
-```bash
-python scripts/splunk_ops/deploy_detections.py --env lab --validate
-```
-
-### 7. Validate Detections Against Sample Data
-
-```bash
-# Run the validation framework against all 14 detections
-python -m validation.validator --all --output-dir data/validation_results/
-
-# Run a single detection
-python -m validation.validator --detection CDET-001
-```
-
-### 8. Load Sample Data into Splunk for Full Validation
-
-```bash
-# Load malicious sample for CDET-001 positive test
+# Load a malicious sample to test CDET-001
 /opt/splunk/bin/splunk add oneshot \
   sample_logs/cloudtrail/malicious/CDET-001_iam_user_created_outside_pipeline.ndjson \
-  -index aws_cloudtrail -sourcetype aws:cloudtrail
+  -index aws_cloudtrail -sourcetype aws:cloudtrail:json
 
-# Run the detection SPL and compare to validation/test_cases/CDET-001_*/expected_alert.json
+# Load all malicious samples at once
+for f in sample_logs/cloudtrail/malicious/*.ndjson; do
+  /opt/splunk/bin/splunk add oneshot "$f" -index aws_cloudtrail -sourcetype aws:cloudtrail:json
+done
 ```
 
-### 9. (Optional) Run Attack Simulations
+### Deploy Splunk Configuration
 
 ```bash
-# Dry-run: see what the simulation would do (no AWS calls)
-python attack_simulations/CDET-001_iam_user_created_outside_pipeline/simulate.py \
-  --username test-backdoor-user
+# Copy integration config to Splunk
+cp splunk/integration/props.conf      $SPLUNK_HOME/etc/apps/cdet/default/
+cp splunk/integration/transforms.conf $SPLUNK_HOME/etc/apps/cdet/default/
+cp splunk/integration/inputs.conf     $SPLUNK_HOME/etc/apps/cdet/default/
+cp splunk/lookups/*.csv               $SPLUNK_HOME/etc/apps/cdet/lookups/
 
-# Read-only cloud enumeration (safe — generates CloudTrail events for CDET-008)
-python attack_simulations/CDET-008_excessive_api_enumeration/simulate.py \
-  --region us-east-1
+# Import saved searches
+cp splunk/savedsearches/*.conf        $SPLUNK_HOME/etc/apps/cdet/default/
+/opt/splunk/bin/splunk restart
 ```
 
 ---
 
-## Project Structure
+## Detection Coverage
+
+14 detections across 9 MITRE ATT&CK tactics:
+
+| ID | Detection Name | Tactic | Technique | Severity | Trigger Event |
+|---|---|---|---|---|---|
+| CDET-001 | IAM User Created Outside Pipeline | Persistence | T1136.003 | High | `CreateUser` |
+| CDET-002 | Access Key Created for Another User | Persistence | T1098.001 | High | `CreateAccessKey` |
+| CDET-003 | CloudTrail Logging Disabled | Defense Evasion | T1562.008 | **Critical** | `StopLogging` / `DeleteTrail` |
+| CDET-004 | Admin Policy Attached Outside Pipeline | Privilege Escalation | T1078.004 | **Critical** | `AttachUserPolicy` |
+| CDET-005 | Cross-Account Role Trust Modified | Privilege Escalation | T1484.002 | High | `UpdateAssumeRolePolicy` |
+| CDET-006 | Root Account Activity | Initial Access | T1078.004 | **Critical** | Any (Root principal) |
+| CDET-007 | EC2 Metadata Credential Abuse | Credential Access | T1552.005 | High | `AssumeRole` (EC2 role + ext IP) |
+| CDET-008 | Excessive API Enumeration | Discovery | T1580 | Medium | `Describe*` / `List*` burst |
+| CDET-009 | S3 Replication to External Account | Exfiltration | T1537 | High | `PutBucketReplication` |
+| CDET-010 | Mass S3 Object Deletion | Impact | T1485 | **Critical** | `DeleteObjects` (≥50 keys) |
+| CDET-011 | Unauthorized EC2 Instance Launch | Impact | T1496 | High | `RunInstances` |
+| CDET-012 | Cross-Account Role Assumption Chain | Lateral Movement | T1550.001 | High | `AssumeRole` |
+| CDET-013 | Security Group Opened to Internet | Defense Evasion | T1562.007 | High | `AuthorizeSecurityGroupIngress` |
+| CDET-014 | CloudTrail Log File Deleted | Defense Evasion | T1070.004 | **Critical** | `DeleteObject` (AWSLogs/) |
+
+### MITRE ATT&CK Coverage Map
+
+```
+Initial Access    ████░░░░░░  1/~10  (T1078.004)
+Persistence       ████████░░  2/~8   (T1136.003, T1098.001)
+Privilege Escal.  ████████░░  2/~8   (T1078.004, T1484.002)
+Defense Evasion   ████████░░  3/~12  (T1562.008, T1562.007, T1070.004)
+Credential Access ████░░░░░░  1/~6   (T1552.005)
+Discovery         ████░░░░░░  1/~8   (T1580)
+Lateral Movement  ████░░░░░░  1/~6   (T1550.001)
+Exfiltration      ████░░░░░░  1/~6   (T1537)
+Impact            ████████░░  2/~8   (T1485, T1496)
+```
+
+---
+
+## Repository Structure
 
 ```
 CloudThreatDetectionLab/
+│
 ├── README.md                          # This file
-├── LICENSE                            # MIT License
-├── CONTRIBUTING.md                    # Contribution guidelines
-├── SECURITY.md                        # Security policy
-├── CHANGELOG.md                       # Version history
-├── requirements.txt                   # Python dependencies
-├── .github/
-│   ├── ISSUE_TEMPLATE/
-│   │   ├── detection_request.md       # New detection request template
-│   │   ├── false_positive_report.md   # FP reporting template
-│   │   └── bug_report.md              # Bug report template
-│   ├── PULL_REQUEST_TEMPLATE.md       # PR checklist
-│   └── workflows/
-│       └── detection_ci.yml           # CI pipeline for detection validation
-├── config/
-│   ├── lab_config.example.yaml        # Example configuration
-│   └── mitre_mappings.yaml            # ATT&CK technique → detection mappings
-├── detections/
-│   ├── README.md                      # Detection catalog overview
-│   ├── initial_access/
-│   ├── persistence/
-│   ├── privilege_escalation/
-│   ├── defense_evasion/
-│   ├── credential_access/
-│   ├── discovery/
-│   ├── lateral_movement/
-│   ├── exfiltration/
-│   └── impact/
-├── splunk/
-│   ├── dashboards/                    # Splunk dashboard XMLs
-│   ├── lookups/                       # Reference lookup tables
-│   └── macros/                        # SPL macro definitions
-├── automation/
-│   ├── lambda/                        # AWS Lambda response functions
-│   ├── response_actions/              # Splunk Adaptive Response scripts
-│   └── enrichment/                    # IOC enrichment integrations
-├── threat_hunting/
-│   ├── hypotheses/                    # Hunt hypotheses (YAML)
-│   └── notebooks/                     # Hunt notebooks (Markdown)
-├── incident_response/
-│   ├── playbooks/                     # IR playbooks per detection type
-│   └── templates/                     # Incident ticket templates
-├── attack_simulation/
-│   ├── scenarios/                     # Attack scenario scripts
-│   └── atomic_mappings/               # Atomic Red Team test mappings
+├── requirements.txt                   # Python dependencies (28 packages)
+│
 ├── scripts/
-│   └── aws_collectors/                # Real AWS telemetry collectors (read-only)
-│       ├── schema.py                  # Common normalized output schema
-│       ├── base_collector.py          # Abstract base class + output writer
-│       ├── cloudtrail_collector.py    # CloudTrail LookupEvents
-│       ├── iam_collector.py           # Users, roles, access keys
-│       ├── security_group_collector.py # Ingress/egress rules, public exposure
-│       ├── securityhub_collector.py   # Security Hub findings
-│       ├── guardduty_collector.py     # GuardDuty findings
-│       └── collect_cli.py             # CLI entrypoint (python -m ...)
-├── sample_logs/                       # Synthetic NDJSON datasets for validation
-│   ├── cloudtrail/malicious/          # Events that SHOULD trigger detections
-│   ├── cloudtrail/benign/             # Events that SHOULD NOT trigger (suppressed)
-│   ├── guardduty/malicious/           # GuardDuty finding samples
-│   ├── securityhub/findings/          # Security Hub ASFF samples
-│   └── alerts/sample_alerts.ndjson   # Expected alert output for all 14 detections
-├── attack_simulations/                # Attack simulation documentation and scripts
-│   └── CDET-XXX_<name>/
-│       ├── attack_description.md      # Technique explanation (threat actor perspective)
-│       ├── simulation_steps.md        # Step-by-step AWS CLI procedure
-│       ├── expected_events.md         # CloudTrail events the attack generates
-│       └── simulate.py                # Executable simulation (dry-run by default)
-├── validation/                        # Detection validation framework
+│   ├── aws_collectors/                # AWS telemetry collection
+│   │   ├── base_collector.py          # Abstract base, CollectorResult, boto3 pattern
+│   │   ├── cloudtrail_collector.py    # CloudTrail LookupEvents (paginated)
+│   │   ├── iam_collector.py           # IAM users, roles, keys, policies
+│   │   ├── guardduty_collector.py     # GuardDuty findings (all regions)
+│   │   ├── securityhub_collector.py   # SecurityHub ASFF findings
+│   │   ├── security_group_collector.py# EC2 security group rules
+│   │   ├── schema.py                  # Shared dataclasses and enums
+│   │   └── collect_cli.py             # click CLI entrypoint
+│   ├── cloudtrail_parser.py           # NDJSON → ParsedEvent normalizer
+│   ├── ioc_extractor.py               # IOC extraction (IPs, ARNs, access keys)
+│   ├── alert_enrichment.py            # ATT&CK + IAM + severity enrichment
+│   ├── detection_validator.py         # Python mirrors of all 14 SPL detections
+│   └── incident_report_generator.py   # Executive / analyst / JSON report output
+│
+├── detections/                        # Detection rules organized by tactic
+│   ├── persistence/                   # CDET-001, CDET-002
+│   ├── privilege_escalation/          # CDET-004, CDET-005
+│   ├── defense_evasion/               # CDET-003, CDET-013, CDET-014
+│   ├── credential_access/             # CDET-007
+│   ├── discovery/                     # CDET-008
+│   ├── lateral_movement/              # CDET-012
+│   ├── exfiltration/                  # CDET-009
+│   ├── impact/                        # CDET-010, CDET-011
+│   └── initial_access/                # CDET-006
+│
+├── sample_logs/                       # 53 NDJSON test files
+│   ├── cloudtrail/malicious/          # 14 positive-test events (one per CDET)
+│   ├── cloudtrail/benign/             # 14 negative-test events + 5 normal activity
+│   ├── cloudtrail/edge_cases/         # 14 boundary-condition events
+│   ├── guardduty/malicious/           # 2 GuardDuty finding samples
+│   └── securityhub/findings/          # 2 SecurityHub ASFF samples
+│
+├── validation/
 │   ├── schema.py                      # TestCase, ValidationResult dataclasses
-│   ├── validator.py                   # Main runner — evaluates detections vs. sample data
-│   └── test_cases/CDET-XXX_<name>/
-│       ├── expected_alert.json        # All required alert output fields
-│       ├── positive_case.md           # What triggers the detection
-│       ├── negative_case.md           # What is suppressed
-│       ├── edge_case.md               # Boundary condition tests
-│       └── checklist.md               # Promotion gate checklist
-├── tests/
-│   └── unit/                          # Unit tests for collectors
+│   ├── validator.py                   # Core validation runner
+│   ├── validation_matrix.md           # Coverage matrix — all 14 CDETs
+│   ├── test_cases/                    # 14 × 6 files = 84 test artifacts
+│   │   └── CDET-XXX_*/
+│   │       ├── expected_alert.json    # Required alert fields + values
+│   │       ├── positive_case.md       # What should trigger
+│   │       ├── negative_case.md       # What should be suppressed
+│   │       ├── edge_case.md           # Boundary behaviour
+│   │       └── checklist.md           # Promotion gate
+│   └── results/                       # Per-CDET validation result docs (14 files)
+│
+├── attack_simulations/                # 14 packages × 4 files = 56 files
+│   └── CDET-XXX_<name>/
+│       ├── attack_description.md      # Adversary perspective and TTPs
+│       ├── simulation_steps.md        # Manual step-by-step AWS CLI procedure
+│       ├── expected_events.md         # CloudTrail events the attack generates
+│       └── simulate.py                # Automated simulation (dry-run safe)
+│
+├── playbooks/                         # 14 × 4 files = 56 files
+│   └── CDET-XXX_<name>/
+│       ├── triage.md                  # First-responder checklist (10 min)
+│       ├── investigation.md           # Technical deep-dive procedure
+│       ├── containment.md             # Stop the attack (with approval gates)
+│       └── recovery.md                # Restore and harden
+│
+├── splunk/
+│   ├── dashboards/                    # 4 dashboard XMLs (Simple XML)
+│   │   ├── soc_dashboard.xml          # Real-time alert queue, health KPIs
+│   │   ├── cloud_security_dashboard.xml  # AWS coverage by service/region
+│   │   ├── detection_engineering_dashboard.xml  # Validation metrics, coverage
+│   │   └── executive_dashboard.xml    # Executive KPIs, tactic coverage
+│   ├── lookups/                       # 11 suppression CSV tables
+│   │   ├── approved_iam_principals.csv
+│   │   ├── automation_role_arns.csv
+│   │   ├── admin_policy_arns.csv
+│   │   ├── approved_aws_accounts.csv
+│   │   └── ...
+│   ├── savedsearches/                 # 14 saved searches across 3 conf files
+│   │   ├── detection_validation.conf
+│   │   ├── coverage_reporting.conf
+│   │   └── detection_health.conf
+│   └── integration/                   # Splunk app configuration
+│       ├── props.conf                 # Sourcetype + field alias definitions
+│       ├── transforms.conf            # Lookup table registrations
+│       ├── inputs.conf                # Monitor + HEC input stanzas
+│       └── savedsearches.conf         # Integration smoke-test searches
+│
+├── enrichment/
+│   ├── enrichment_schema.md           # EnrichedAlert field documentation
+│   └── enrichment_workflow.md         # End-to-end enrichment pipeline guide
+│
+├── reports/
+│   ├── executive_report_template.md
+│   ├── analyst_report_template.md
+│   └── investigation_summary_template.md
+│
+├── ingestion/                         # Per-source ingestion workflow guides
+│   ├── cloudtrail_ingestion.md
+│   ├── iam_ingestion.md
+│   ├── securityhub_ingestion.md
+│   └── guardduty_ingestion.md
+│
 └── docs/
-    ├── architecture/                  # Architecture documentation + Mermaid diagrams
-    ├── detection_engineering/         # DE standards, severity framework, SPL guidelines
-    ├── detection_coverage/            # Coverage matrix
-    ├── mitre_mapping/                 # ATT&CK technique mapping
-    ├── splunk/                        # Splunk index, field mapping, dashboard strategy
-    ├── validation/                    # Validation guide and sample data guide
-    └── walkthrough/                   # Project onboarding walkthrough
+    ├── project_metrics.md             # Repository-wide metrics summary
+    ├── final_project_summary.md       # Project summary with lessons learned
+    ├── integration/                   # End-to-end workflow documentation
+    ├── architecture/                  # Architecture docs (8 files)
+    ├── detection_engineering/         # DE standards, SPL guidelines (5 files)
+    ├── soc_operations/                # SOC runbooks (4 files)
+    ├── portfolio/                     # Recruiter and interview documentation
+    ├── interview/                     # Interview preparation guides
+    ├── dashboards/                    # Dashboard panel documentation
+    ├── diagrams/                      # Mermaid architecture diagrams
+    └── coverage_reporting/            # Coverage and validation metrics
 ```
 
 ---
 
-## Detection Engineering Workflow
+## AWS Integration
 
-This project follows a structured detection engineering lifecycle adapted from enterprise SOC practices:
+All Python code uses `boto3`'s default credential chain. **No credentials are ever hardcoded.**
 
-```
-1. IDENTIFY        Threat intelligence, red team findings, threat model gaps
-       ↓
-2. DESIGN          Hypothesis → data requirements → SPL logic draft
-       ↓
-3. VALIDATE        Run against attack simulation data, measure TPR/FPR
-       ↓
-4. TUNE            Adjust thresholds, add whitelists, reduce false positives
-       ↓
-5. DOCUMENT        MITRE mapping, data sources, response actions, runbook
-       ↓
-6. DEPLOY          Push to Splunk via CI/CD, enable alerting
-       ↓
-7. MONITOR         Track alert volume, FP rate, coverage metrics
-       ↓
-8. ITERATE         Continuous improvement loop driven by new intel
+```bash
+aws configure
+# Prompts for: Access Key ID, Secret Access Key, region, output format
+# A read-only Security Auditor role (or equivalent) is sufficient.
+# All collectors use only describe/get/list API calls.
 ```
 
-Each detection in this repository includes:
-- **Metadata** — Author, creation date, last modified, confidence level, severity
-- **Hypothesis** — What adversary behavior this detects and why
-- **Data Sources** — Which AWS log sources are required
-- **SPL Query** — The detection logic (annotated)
-- **MITRE Mapping** — Tactic, technique, sub-technique
-- **Tuning Notes** — Known false positives and how to suppress them
-- **Response Actions** — Automated and manual response procedures
-- **Test Cases** — How to validate the detection fires correctly
+Minimum IAM permissions for full collection:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:LookupEvents",
+        "cloudtrail:GetTrailStatus",
+        "guardduty:ListDetectors",
+        "guardduty:ListFindings",
+        "guardduty:GetFindings",
+        "securityhub:GetFindings",
+        "iam:GetUser",
+        "iam:ListUsers",
+        "iam:ListRoles",
+        "iam:ListAccessKeys",
+        "iam:ListMFADevices",
+        "iam:ListAttachedUserPolicies",
+        "ec2:DescribeSecurityGroups"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
 
 ---
 
-## Phases & Roadmap
+## Validation Framework
 
-| Phase | Title | Status |
-|-------|-------|--------|
-| Architecture | Real AWS Integration — boto3 + aws configure | ✅ Complete |
-| Phase 1 | Security Architecture, Telemetry Foundation & Detection Framework | ✅ Complete |
-| Phase 2 | Detection Engineering Library (14 MITRE-mapped SPL detections) | ✅ Complete |
-| Phase 3 | Telemetry Generation, Sample Data & Detection Validation Framework | ✅ Complete |
-| Phase 4 | Splunk Dashboards & Metrics | ⏳ Planned |
-| Phase 5 | Threat Hunting Notebooks & Hypotheses | ⏳ Planned |
-| Phase 6 | Automated Response (Lambda + Adaptive Response) | ⏳ Planned |
-| Phase 7 | Incident Response Playbooks | ⏳ Planned |
+Every detection has three test types, each backed by a real NDJSON file:
+
+| Test Type | File Location | Purpose |
+|---|---|---|
+| **Positive** | `sample_logs/cloudtrail/malicious/` | Confirms detection fires on attack data |
+| **Negative** | `sample_logs/cloudtrail/benign/` | Confirms detection suppresses approved actors |
+| **Edge case** | `sample_logs/cloudtrail/edge_cases/` | Confirms boundary behaviour is correct |
+
+**Python offline validation** (no Splunk required):
+
+```bash
+python scripts/detection_validator.py
+# Runs 14 heuristic detectors against sample data
+# Each heuristic mirrors the SPL logic exactly
+# Output: PASS/FAIL per detection per test type
+```
+
+**Splunk validation** (with Splunk available):
+
+```spl
+| savedsearch CDET-ValidatePositive-001
+```
 
 ---
 
-## Contributing
+## Incident Response Capabilities
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
-- Submitting new detections
-- Reporting false positives
-- Improving documentation
-- Running the test suite locally
+Every detection has a four-file playbook:
+
+| File | Audience | Time to Complete |
+|---|---|---|
+| `triage.md` | On-call analyst | 5–10 minutes |
+| `investigation.md` | Tier-2 analyst | 30–60 minutes |
+| `containment.md` | Senior analyst + approval | 15–30 minutes |
+| `recovery.md` | Engineer + analyst | 1–4 hours |
+
+Automated enrichment runs in seconds:
+
+```python
+from scripts.alert_enrichment import AlertEnricher
+from scripts.incident_report_generator import IncidentReportGenerator
+
+enricher = AlertEnricher()          # uses aws configure credentials
+enriched = enricher.enrich(alert)   # ATT&CK + IAM + severity + queries
+
+gen = IncidentReportGenerator()
+report = gen.generate(enriched)
+gen.write_reports(report, output_dir=Path("reports/generated"))
+# Writes: INC-CDET-001-20240115_executive.md
+#         INC-CDET-001-20240115_analyst.md
+#         INC-CDET-001-20240115_summary.json
+```
+
+---
+
+## Screenshots
+
+> **Note:** Screenshots are taken from a live Splunk environment with sample data loaded. See [`images/screenshots/README.md`](images/screenshots/README.md) for the full capture guide.
+
+| Screenshot | Description |
+|---|---|
+| `splunk_indexes.png` | aws_cloudtrail, aws_security, cdet_alerts indexes with event counts |
+| `collector_execution.png` | Terminal output from `collect_cli.py --all` |
+| `cloudtrail_ingestion.png` | Splunk search showing normalized CloudTrail events |
+| `detection_results.png` | CDET-001 detection firing on positive sample data |
+| `soc_dashboard.png` | SOC dashboard — alert queue, detection health, KPIs |
+| `cloud_security_dashboard.png` | Cloud security dashboard — coverage by service and region |
+| `validation_workflow.png` | Validation matrix showing all 14 CDETs in Testing |
+| `repo_architecture.png` | Repository structure showing component relationships |
+
+---
+
+## Portfolio Value
+
+This project demonstrates the full detection engineering lifecycle that senior SOC and detection engineering roles require:
+
+**What interviewers will see:**
+- Detection-as-code: every detection has YAML metadata, SPL query, test cases, and a Python heuristic mirror
+- Credential security discipline: zero hardcoded credentials in the entire codebase
+- Layered suppression: lookup-based false-positive management at both SPL and Python layers
+- Separation of concerns: collect → parse → detect → enrich → report, each as an independent module
+- Test-driven detection development: positive/negative/edge tests before any detection goes live
+- Production-ready Splunk: savedsearches.conf, props.conf, transforms.conf, inputs.conf
+- Complete incident response: triage through recovery, automated enrichment and reporting
+
+**Technology coverage demonstrated:**
+AWS · CloudTrail · GuardDuty · SecurityHub · IAM · EC2 · S3 · STS · Splunk · SPL · MITRE ATT&CK · Python · boto3 · structlog · click · NDJSON · ASFF · Incident Response · Detection Engineering
+
+---
+
+## Project Metrics
+
+| Metric | Count |
+|---|---|
+| Detections (CDET-001 – CDET-014) | 14 |
+| MITRE ATT&CK tactics covered | 9 |
+| MITRE ATT&CK techniques covered | 13 |
+| Test cases (positive + negative + edge) | 42 |
+| Sample NDJSON log files | 53 |
+| Attack simulation packages | 14 |
+| Incident response playbook files | 56 |
+| Python automation modules | 14 |
+| Splunk saved searches | 14 |
+| Splunk lookup tables | 11 |
+| Splunk dashboards | 4 |
+| Report templates | 3 |
+| SOC operations runbooks | 4 |
+
+---
+
+## Future Improvements
+
+- **Phase 6 — Automated Response**: AWS Lambda functions for automated IAM key revocation, EC2 isolation, and Security Group rollback triggered via Splunk Adaptive Response
+- **CI/CD Pipeline**: GitHub Actions workflow running `detection_validator.py` on every PR to prevent detection regressions
+- **Threat Intelligence Integration**: Enrich alerts with IP reputation (GreyNoise, AbuseIPDB) in `alert_enrichment.py`
+- **SOAR Integration**: Splunk SOAR (Phantom) playbooks calling the Python enrichment and response scripts
+- **Extended Coverage**: Expand to 30+ CDETs covering CloudFormation abuse, KMS key deletion, RDS snapshot exfiltration
 
 ---
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Disclaimer
 
-This lab is for **educational and authorized testing purposes only**. All attack simulations must be performed in isolated, owned environments. Never run these scripts against systems you do not own or have explicit written permission to test.
+This project is for **educational and authorized testing purposes only**. All attack simulations must be performed in isolated, owned environments with explicit written authorization. Never run simulation scripts against systems you do not own.
 
 ---
 
-*Built with the MITRE ATT&CK® framework. MITRE ATT&CK® is a registered trademark of The MITRE Corporation.*
+*MITRE ATT&CK® is a registered trademark of The MITRE Corporation.*

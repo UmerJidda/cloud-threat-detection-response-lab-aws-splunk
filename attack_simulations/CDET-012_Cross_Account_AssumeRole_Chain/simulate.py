@@ -29,7 +29,6 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import sys
 from typing import Optional
@@ -71,10 +70,7 @@ def get_org_accounts(session: boto3.Session) -> list[dict]:
         if code == "AWSOrganizationsNotInUseException":
             log.warning("This account is not part of an AWS Organization")
         elif code == "AccessDenied":
-            log.warning(
-                "AccessDenied on organizations:ListAccounts — "
-                "not in management account or missing permissions"
-            )
+            log.warning("AccessDenied on organizations:ListAccounts — not in management account or missing permissions")
         else:
             log.warning("Could not list org accounts: %s", code)
     return accounts
@@ -156,15 +152,19 @@ def enumerate_accessible_accounts(
 
         if creds:
             identity = get_caller_identity_with_creds(creds, region)
-            accessible.append({
-                "account_id": account_id,
-                "account_name": account_name,
-                "role": target_role,
-                "assumed_arn": identity.get("Arn") if identity else "unknown",
-            })
+            accessible.append(
+                {
+                    "account_id": account_id,
+                    "account_name": account_name,
+                    "role": target_role,
+                    "assumed_arn": identity.get("Arn") if identity else "unknown",
+                }
+            )
             log.warning(
                 "[ACCESSIBLE] Account: %s (%s) — Role: %s",
-                account_id, account_name, target_role,
+                account_id,
+                account_name,
+                target_role,
             )
         else:
             log.info("[BLOCKED]    Account: %s (%s)", account_id, account_name)
@@ -206,9 +206,7 @@ def execute_single_assume(
             "AssumeRole FAILED for %s — AccessDenied or role not found",
             role_arn,
         )
-        log.info(
-            "AccessDenied AssumeRole attempts are still recorded in CloudTrail"
-        )
+        log.info("AccessDenied AssumeRole attempts are still recorded in CloudTrail")
         return None
 
 
@@ -258,7 +256,8 @@ def execute_role_chain(
     else:
         log.warning(
             "Chain hop-2 FAILED — AccessDenied for %s in account %s",
-            chain_to_role, chain_to_account,
+            chain_to_role,
+            chain_to_account,
         )
         log.info("The failed attempt is still recorded in CloudTrail as an AssumeRole event")
         return None
@@ -346,9 +345,7 @@ def main() -> None:
     if args.execute:
         if args.target_account:
             # Single target execution
-            hop1_creds = execute_single_assume(
-                session, args.target_account, args.target_role, args.region, current_arn
-            )
+            hop1_creds = execute_single_assume(session, args.target_account, args.target_role, args.region, current_arn)
 
             if hop1_creds and args.chain_to_account:
                 # Chain to second account
@@ -388,9 +385,7 @@ def main() -> None:
                 print("No accounts were accessible with the specified role.")
                 print("This is the expected result in a well-configured organization.")
         else:
-            log.error(
-                "No accounts to test. Provide --target-account or ensure org permissions."
-            )
+            log.error("No accounts to test. Provide --target-account or ensure org permissions.")
     else:
         # Dry-run: just show what would be done
         print()
