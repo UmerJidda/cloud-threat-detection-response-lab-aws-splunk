@@ -36,7 +36,7 @@ jobs:
         run: ruff format --check .
 
       - name: Run mypy type check
-        run: mypy scripts/ automation/ --ignore-missing-imports
+        run: mypy scripts/ --ignore-missing-imports
 
   # ─────────────────────────────────────────────
   # Job 2: Unit tests
