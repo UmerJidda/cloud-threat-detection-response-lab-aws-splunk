@@ -424,8 +424,9 @@ def _example_tests() -> None:
         },
         "requestParameters": {"userName": "backdoor-user"},
     }
-    e = parser.parse_dict(raw_001)
-    result = run_validation("CDET-001", [e], validators, should_fire=True)
+    e001 = parser.parse_dict(raw_001)
+    assert e001 is not None
+    result = run_validation("CDET-001", [e001], validators, should_fire=True)
     assert result.passed, f"CDET-001 positive failed: {result.summary}"
 
     # CDET-003 positive: StopLogging
@@ -445,8 +446,9 @@ def _example_tests() -> None:
         },
         "requestParameters": {"name": "management-events-trail"},
     }
-    e = parser.parse_dict(raw_003)
-    result = run_validation("CDET-003", [e], validators, should_fire=True)
+    e003 = parser.parse_dict(raw_003)
+    assert e003 is not None
+    result = run_validation("CDET-003", [e003], validators, should_fire=True)
     assert result.passed, f"CDET-003 positive failed: {result.summary}"
 
     # CDET-006 positive: Root activity
@@ -460,8 +462,9 @@ def _example_tests() -> None:
         "userAgent": "aws-cli",
         "userIdentity": {"type": "Root", "arn": "arn:aws:iam::123456789012:root", "accountId": "123456789012"},
     }
-    e = parser.parse_dict(raw_006)
-    result = run_validation("CDET-006", [e], validators, should_fire=True)
+    e006 = parser.parse_dict(raw_006)
+    assert e006 is not None
+    result = run_validation("CDET-006", [e006], validators, should_fire=True)
     assert result.passed, f"CDET-006 positive failed: {result.summary}"
 
     print("All detection validator assertions passed.")

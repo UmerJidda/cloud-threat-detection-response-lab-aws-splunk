@@ -21,7 +21,7 @@ Permissions required (read-only):
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterator
+from typing import Any, Iterator
 
 import structlog
 from botocore.exceptions import ClientError
@@ -55,7 +55,7 @@ class IAMCollector(BaseCollector):
     # Users
     # ──────────────────────────────────────────────────────────────────
 
-    def _collect_users(self, iam: object) -> Iterator[IAMUser | IAMAccessKey]:
+    def _collect_users(self, iam: Any) -> Iterator[IAMUser | IAMAccessKey]:
         paginator = iam.get_paginator("list_users")
         try:
             for page in paginator.paginate():
@@ -89,7 +89,7 @@ class IAMCollector(BaseCollector):
             self._log.error("iam_list_users_failed", error=str(exc))
             raise
 
-    def _collect_access_keys(self, iam: object, user_name: str) -> Iterator[IAMAccessKey]:
+    def _collect_access_keys(self, iam: Any, user_name: str) -> Iterator[IAMAccessKey]:
         try:
             paginator = iam.get_paginator("list_access_keys")
             for page in paginator.paginate(UserName=user_name):
@@ -107,21 +107,21 @@ class IAMCollector(BaseCollector):
         except ClientError as exc:
             self._log.warning("iam_list_access_keys_failed", user=user_name, error=str(exc))
 
-    def _get_key_last_used(self, iam: object, key_id: str) -> dict:
+    def _get_key_last_used(self, iam: Any, key_id: str) -> dict:
         try:
             response = iam.get_access_key_last_used(AccessKeyId=key_id)
             return response.get("AccessKeyLastUsed", {})
         except ClientError:
             return {}
 
-    def _has_mfa(self, iam: object, user_name: str) -> bool:
+    def _has_mfa(self, iam: Any, user_name: str) -> bool:
         try:
             response = iam.list_mfa_devices(UserName=user_name)
             return len(response.get("MFADevices", [])) > 0
         except ClientError:
             return False
 
-    def _list_attached_user_policies(self, iam: object, user_name: str) -> list[str]:
+    def _list_attached_user_policies(self, iam: Any, user_name: str) -> list[str]:
         try:
             paginator = iam.get_paginator("list_attached_user_policies")
             arns: list[str] = []
@@ -131,7 +131,7 @@ class IAMCollector(BaseCollector):
         except ClientError:
             return []
 
-    def _list_inline_user_policies(self, iam: object, user_name: str) -> list[str]:
+    def _list_inline_user_policies(self, iam: Any, user_name: str) -> list[str]:
         try:
             paginator = iam.get_paginator("list_user_policies")
             names: list[str] = []
@@ -141,7 +141,7 @@ class IAMCollector(BaseCollector):
         except ClientError:
             return []
 
-    def _list_user_groups(self, iam: object, user_name: str) -> list[str]:
+    def _list_user_groups(self, iam: Any, user_name: str) -> list[str]:
         try:
             paginator = iam.get_paginator("list_groups_for_user")
             groups: list[str] = []
@@ -155,7 +155,7 @@ class IAMCollector(BaseCollector):
     # Roles
     # ──────────────────────────────────────────────────────────────────
 
-    def _collect_roles(self, iam: object) -> Iterator[IAMRole]:
+    def _collect_roles(self, iam: Any) -> Iterator[IAMRole]:
         paginator = iam.get_paginator("list_roles")
         try:
             for page in paginator.paginate():
@@ -176,7 +176,7 @@ class IAMCollector(BaseCollector):
             self._log.error("iam_list_roles_failed", error=str(exc))
             raise
 
-    def _list_attached_role_policies(self, iam: object, role_name: str) -> list[str]:
+    def _list_attached_role_policies(self, iam: Any, role_name: str) -> list[str]:
         try:
             paginator = iam.get_paginator("list_attached_role_policies")
             arns: list[str] = []
@@ -186,7 +186,7 @@ class IAMCollector(BaseCollector):
         except ClientError:
             return []
 
-    def _list_inline_role_policies(self, iam: object, role_name: str) -> list[str]:
+    def _list_inline_role_policies(self, iam: Any, role_name: str) -> list[str]:
         try:
             paginator = iam.get_paginator("list_role_policies")
             names: list[str] = []

@@ -79,7 +79,11 @@ def main(
         sys.exit(1)
 
     output_path = Path(output_dir)
-    names_to_run = list(COLLECTORS.keys()) if run_all else [collector]
+    if run_all:
+        names_to_run: list[str] = list(COLLECTORS.keys())
+    else:
+        assert collector is not None
+        names_to_run = [collector]
 
     for name in names_to_run:
         cls = COLLECTORS[name]

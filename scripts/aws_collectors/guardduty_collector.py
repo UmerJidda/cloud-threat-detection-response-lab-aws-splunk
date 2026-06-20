@@ -80,7 +80,7 @@ class GuardDutyCollector(BaseCollector):
             batch = finding_ids[batch_start : batch_start + _GET_FINDINGS_BATCH_SIZE]
             yield from self._get_findings(client, detector_id, batch)
 
-    def _resolve_detector_id(self, client: object) -> str | None:
+    def _resolve_detector_id(self, client: Any) -> str | None:
         if self._detector_id:
             return self._detector_id
         try:
@@ -91,7 +91,7 @@ class GuardDutyCollector(BaseCollector):
             self._log.error("guardduty_list_detectors_failed", error=str(exc))
             return None
 
-    def _list_finding_ids(self, client: object, detector_id: str) -> Iterator[str]:
+    def _list_finding_ids(self, client: Any, detector_id: str) -> Iterator[str]:
         criteria = {
             "Criterion": {
                 "severity": {
@@ -110,7 +110,7 @@ class GuardDutyCollector(BaseCollector):
             self._log.error("guardduty_list_findings_failed", error=str(exc))
             raise
 
-    def _get_findings(self, client: object, detector_id: str, finding_ids: list[str]) -> Iterator[GuardDutyFinding]:
+    def _get_findings(self, client: Any, detector_id: str, finding_ids: list[str]) -> Iterator[GuardDutyFinding]:
         try:
             response = client.get_findings(DetectorId=detector_id, FindingIds=finding_ids)
             for raw in response.get("Findings", []):
