@@ -1,6 +1,5 @@
 # Cloud Threat Detection & Response Platform
 
-[![CI](https://img.shields.io/github/actions/workflow/status/UmerJidda/CloudThreatDetectionLab/detection_ci.yml?label=CI&logo=github)](https://github.com/YOUR_USERNAME/CloudThreatDetectionLab/actions)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Splunk](https://img.shields.io/badge/splunk-9.x-green.svg)](https://www.splunk.com/)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-v15-red.svg)](https://attack.mitre.org/)
