@@ -67,6 +67,7 @@ credentials.json
 *_credentials.yml
 secrets.yaml
 secrets.yml
+CLAUDE.md
 .env.local
 .env.*.local
 
