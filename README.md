@@ -153,7 +153,7 @@ Critical detections (CDET-003, CDET-006, CDET-014) run every 10 minutes with a 1
 - Splunk Enterprise 9.x (optional — offline validation runs without it)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/CloudThreatDetectionLab.git
+git clone https://github.com/UmerJidda/CloudThreatDetectionLab.git
 cd CloudThreatDetectionLab
 pip install -r requirements.txt
 ```
