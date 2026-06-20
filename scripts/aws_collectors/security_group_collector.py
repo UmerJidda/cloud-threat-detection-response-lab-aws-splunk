@@ -51,7 +51,7 @@ class SecurityGroupCollector(BaseCollector):
             )
             raise
 
-    def _normalize_sg(self, sg: dict[str, Any]) -> Iterator[SecurityGroupRule]:
+    def _normalize_sg(self, sg: Any) -> Iterator[SecurityGroupRule]:
         group_id = sg["GroupId"]
         group_name = sg.get("GroupName", "")
         vpc_id = sg.get("VpcId")
